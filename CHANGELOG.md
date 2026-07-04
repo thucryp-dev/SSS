@@ -18,6 +18,29 @@ tooling — but they follow the same conceptual meaning as SemVer:
 _Add new entries here as you make changes — then move them under a new
 version heading below once you're ready to consider them "shipped."_
 
+## [1.12.0] - 2026-07-04
+### Added
+- **Adult age group** ("වැඩිහිටි"): fourth option alongside the three
+  child bands, with its own system-prompt guidance — theological depth,
+  historical/cultural context, formal-but-clear Sinhala, deep open-ended
+  discussion questions, and no reference to "children" in any of the output.
+- **Modular section selection**: teachers now choose which sections to
+  generate before submitting — "කතාව" (story), "ප්‍රශ්න" (quiz), "රූපය"
+  (image) — via toggle buttons. Title and Bible verse are always generated.
+  Gemini only outputs the requested fields; image generation only runs if
+  the image section is selected. `LessonSections` type added to
+  `lib/firebase.ts` and threaded through all call sites (API, offline
+  queue, history save).
+- `LessonSections` field added to `LessonData` and `PendingLessonRequest`,
+  with backward-compatible defaults for documents saved before this version.
+
+### Fixed
+- **502 Gemini errors**: replaced the single hard-coded `"gemini-2.0-flash"`
+  model (not accessible to all API key tiers) with a fallback chain —
+  `gemini-1.5-flash` → `gemini-1.5-flash-8b` → `gemini-1.5-pro` →
+  `gemini-2.0-flash-lite` → `gemini-2.0-flash` — the first model the key
+  has access to is used automatically.
+
 ## [1.11.0] - 2026-06-22
 ### Added
 - **Age group selector** (5-7 / 8-10 / 11-12): three-button toggle on the

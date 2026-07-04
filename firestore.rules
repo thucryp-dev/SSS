@@ -1,0 +1,95 @@
+rules_version = '2';
+
+/**
+ * firestore.rules
+ *
+ * Scoped to Firebase Anonymous Auth (one stable uid per device/browser,
+ * no login screen — see lib/firebase.ts's getCurrentUid()). Every document
+ * carries an `ownerId` set to `request.auth.uid` on create.
+ *
+ * DELIBERATE SPLIT — this is the part worth reading carefully:
+ *   - `lessons/{lessonId}`: `allow get` is OPEN (`if true`), but `allow
+ *     list` is owner-only. That's what makes both of these true at once:
+ *       1. Shareable /lesson/[id] links work for ANYONE who has the URL
+ *          (a `get` — fetching one specific known document id).
+ *       2. The history page only ever lists YOUR OWN lessons (a `list` —
+ *          a collection query), never another teacher's.
+ *     Firestore evaluates `list` rules against the query's own `where`
+ *     clause; lib/firebase.ts's getLessonHistory() always queries
+ *     `where("ownerId", "==", <your uid>)`, so this rule is satisfiable
+ *     and the query succeeds — querying without that clause (or for
+ *     someone else's uid) is correctly rejected.
+ *   - `pendingLessons/{requestId}`: both `get` and `list` are owner-only.
+ *     There's no shareable-link use case for an in-flight request, so
+ *     there's no reason to open it up the way `lessons` is.
+ *
+ * REQUIRES the "Anonymous" sign-in provider enabled in Firebase Console →
+ * Authentication → Sign-in method. Without it, every write below fails
+ * with a permission error (lib/firebase.ts's signInAnonymously() call
+ * will reject).
+ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidPendingLesson(data) {
+      return data.keys().hasAll(['inputText', 'createdAt', 'status', 'ownerId', 'ageGroup'])
+        && data.inputText is string
+        && data.inputText.size() > 0
+        && data.inputText.size() <= 2000
+        && data.createdAt is int
+        && data.status == 'pending'
+        && data.ownerId is string
+        && data.ageGroup in ['5-7', '8-10', '11-12'];
+    }
+
+    function isValidLesson(data) {
+      return data.keys().hasAll(['title', 'bible_verse', 'story_slides', 'quiz_questions', 'inputText', 'createdAt', 'ownerId'])
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 200
+        && data.bible_verse is string
+        && data.story_slides is list
+        && data.story_slides.size() <= 12
+        && data.quiz_questions is list
+        && data.quiz_questions.size() <= 12
+        && data.inputText is string
+        && data.inputText.size() <= 2000
+        && data.createdAt is int
+        && data.ownerId is string;
+        // age_group is validated if present but intentionally optional here
+        // so lessons saved before v1.11 (when this field didn't exist yet)
+        // aren't retroactively invalid — the rule for new writes is enforced
+        // in the app code (the API always returns a valid age_group).
+    }
+
+    match /pendingLessons/{requestId} {
+      allow create: if request.auth != null
+        && request.resource.data.ownerId == request.auth.uid
+        && isValidPendingLesson(request.resource.data);
+      allow get, list, delete: if request.auth != null
+        && request.auth.uid == resource.data.ownerId;
+      // Requests are write-once-then-deleted by the client queue drain in
+      // app/page.tsx — never patched in place.
+      allow update: if false;
+    }
+
+    match /lessons/{lessonId} {
+      allow create: if request.auth != null
+        && request.resource.data.ownerId == request.auth.uid
+        && isValidLesson(request.resource.data);
+      // Shareable links: anyone with the URL can fetch this one document.
+      allow get: if true;
+      // History list: only your own lessons.
+      allow list: if request.auth != null
+        && request.auth.uid == resource.data.ownerId;
+      // History is append-only from this app's UI.
+      allow update, delete: if false;
+    }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

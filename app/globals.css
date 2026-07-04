@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * app/globals.css
+ *
+ * CSS variables consumed by tailwind.config.ts and by the shadcn
+ * primitives in components/ui/*. Values are tuned to the app's warm
+ * amber/cream palette (rather than shadcn's default neutral gray) so even
+ * un-overridden component defaults stay visually consistent.
+ *
+ * Intentionally light-mode only: this app is built for high-contrast
+ * legibility for elderly teachers, with no theme toggle in the brief, so a
+ * `.dark` block was deliberately left out rather than shipped unused.
+ *
+ * Using Tailwind v4 (CSS-first config, no tailwind.config.ts)? Move this
+ * `:root` block as-is, but reference the colors via an `@theme inline`
+ * block instead of tailwind.config.ts — see Tailwind's v4 upgrade guide.
+ */
+
+@layer base {
+  :root {
+    --background: 45 100% 97%;
+    --foreground: 25 30% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 25 30% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 25 30% 12%;
+
+    --primary: 26 85% 38%;
+    --primary-foreground: 48 100% 97%;
+
+    --secondary: 45 90% 90%;
+    --secondary-foreground: 28 55% 20%;
+
+    --muted: 45 60% 94%;
+    --muted-foreground: 30 15% 40%;
+
+    --accent: 45 90% 90%;
+    --accent-foreground: 28 55% 20%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 40 50% 85%;
+    --input: 40 50% 85%;
+    --ring: 26 85% 38%;
+
+    --radius: 0.85rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

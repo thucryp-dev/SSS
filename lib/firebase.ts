@@ -72,7 +72,14 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Target age band for lesson complexity/vocabulary — tailors the Gemini prompt. */
-export type AgeGroup = "5-7" | "8-10" | "11-12";
+export type AgeGroup = "5-7" | "8-10" | "11-12" | "adult";
+
+/** Which output sections the teacher requested — determines what the API generates. */
+export interface LessonSections {
+  story: boolean;
+  quiz: boolean;
+  image: boolean;
+}
 
 /** The structured shape returned by /api/generate-lesson and rendered by the UI. */
 export interface LessonData {
@@ -82,6 +89,7 @@ export interface LessonData {
   quiz_questions: string[];
   image_url: string | null;
   age_group: AgeGroup;
+  sections: LessonSections;
 }
 
 /** A lesson request waiting to be sent to the AI engine (saved while offline). */
@@ -89,7 +97,8 @@ export interface PendingLessonRequest {
   id: string;
   inputText: string;
   ageGroup: AgeGroup;
-  createdAt: number; // epoch millis — usable for ordering even before the doc reaches the server
+  sections: LessonSections;
+  createdAt: number;
 }
 
 /** A completed lesson as stored in the "lessons" history collection. */
@@ -258,7 +267,8 @@ const HISTORY_COLLECTION = "lessons";
  */
 export async function queuePendingLesson(
   inputText: string,
-  ageGroup: AgeGroup
+  ageGroup: AgeGroup,
+  sections: LessonSections
 ): Promise<PendingLessonRequest> {
   if (!isFirebaseConfigured) {
     throw new Error("FIREBASE_NOT_CONFIGURED");
@@ -272,13 +282,14 @@ export async function queuePendingLesson(
   await setDoc(doc(firestore, PENDING_COLLECTION, id), {
     inputText,
     ageGroup,
+    sections,
     createdAt,
     serverCreatedAt: serverTimestamp(),
     status: "pending",
     ownerId,
   });
 
-  return { id, inputText, ageGroup, createdAt };
+  return { id, inputText, ageGroup, sections, createdAt };
 }
 
 /** Fetches all currently pending (not-yet-processed) lesson requests for THIS device, oldest first. */
@@ -294,15 +305,20 @@ export async function getPendingLessons(): Promise<PendingLessonRequest[]> {
   );
   const snapshot = await getDocs(q);
 
+  const DEFAULT_SECTIONS: LessonSections = { story: true, quiz: true, image: true };
+
   return snapshot.docs.map((d) => {
-    // ageGroup defaults to "8-10" for any request queued before this field
-    // existed (pre-v1.11), so an old in-flight request from an app update
-    // doesn't crash instead of just using a sensible default.
-    const data = d.data() as { inputText: string; ageGroup?: AgeGroup; createdAt: number };
+    const data = d.data() as {
+      inputText: string;
+      ageGroup?: AgeGroup;
+      sections?: LessonSections;
+      createdAt: number;
+    };
     return {
       id: d.id,
       inputText: data.inputText,
       ageGroup: data.ageGroup ?? "8-10",
+      sections: data.sections ?? DEFAULT_SECTIONS,
       createdAt: data.createdAt,
     };
   });

@@ -30,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   type AgeGroup,
   type LessonData,
+  type LessonSections,
   getPendingLessons,
   isFirebaseConfigured,
   queuePendingLesson,
@@ -76,6 +77,7 @@ export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
   const [voiceLang, setVoiceLang] = useState<"si-LK" | "en-US">("si-LK");
   const [ageGroup, setAgeGroup] = useState<AgeGroup>("8-10");
+  const [sections, setSections] = useState<LessonSections>({ story: true, quiz: true, image: true });
   const [isOnline, setIsOnline] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,11 +110,15 @@ export default function Home() {
   }, [isLoading]);
 
   // ---- Core generation call ----------------------------------------------
-  const callGenerateLesson = useCallback(async (text: string, selectedAgeGroup: AgeGroup): Promise<LessonData> => {
+  const callGenerateLesson = useCallback(async (
+    text: string,
+    selectedAgeGroup: AgeGroup,
+    selectedSections: LessonSections
+  ): Promise<LessonData> => {
     const res = await fetch("/api/generate-lesson", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input: text, ageGroup: selectedAgeGroup }),
+      body: JSON.stringify({ input: text, ageGroup: selectedAgeGroup, sections: selectedSections }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -130,7 +136,7 @@ export default function Home() {
       setSyncingNotice(true);
       for (const req of pending) {
         try {
-          const result = await callGenerateLesson(req.inputText, req.ageGroup);
+          const result = await callGenerateLesson(req.inputText, req.ageGroup, req.sections);
           await saveLessonToHistory(req.inputText, result);
           await removePendingLesson(req.id);
           setLesson(result);
@@ -140,8 +146,6 @@ export default function Home() {
         }
       }
     } catch (e) {
-      // getPendingLessons() itself failed (e.g. a real Firestore error,
-      // not just "unconfigured" — that case already returns [] quietly).
       console.error("Failed to read the pending-lesson queue:", e);
     } finally {
       setSyncingNotice(false);
@@ -266,9 +270,13 @@ export default function Home() {
   }, [vibrate]);
 
   // ---- Queue offline, or explain honestly why that's not possible -----------
-  const queueOrWarn = useCallback(async (text: string, selectedAgeGroup: AgeGroup) => {
+  const queueOrWarn = useCallback(async (
+    text: string,
+    selectedAgeGroup: AgeGroup,
+    selectedSections: LessonSections
+  ) => {
     try {
-      await queuePendingLesson(text, selectedAgeGroup);
+      await queuePendingLesson(text, selectedAgeGroup, selectedSections);
       setOfflineNotice(true);
     } catch (e) {
       const message = e instanceof Error ? e.message : "";
@@ -293,6 +301,10 @@ export default function Home() {
       setError("කරුණාකර පාඩම සඳහා කෙටි විස්තරයක් කථා කරන්න හෝ ලියන්න.");
       return;
     }
+    if (!sections.story && !sections.quiz && !sections.image) {
+      setError("කරුණාකර අවම වශයෙන් එක් කොටසක් හෝ තෝරන්න.");
+      return;
+    }
 
     vibrate(60);
     setError(null);
@@ -300,13 +312,13 @@ export default function Home() {
     setLesson(null);
 
     if (!navigator.onLine) {
-      await queueOrWarn(text, ageGroup);
+      await queueOrWarn(text, ageGroup, sections);
       return;
     }
 
     setIsLoading(true);
     try {
-      const result = await callGenerateLesson(text, ageGroup);
+      const result = await callGenerateLesson(text, ageGroup, sections);
       setLesson(result);
       try {
         const saved = await saveLessonToHistory(text, result);
@@ -318,14 +330,14 @@ export default function Home() {
       }
     } catch (e) {
       if (!navigator.onLine) {
-        await queueOrWarn(text, ageGroup);
+        await queueOrWarn(text, ageGroup, sections);
       } else {
         setError(e instanceof Error ? e.message : "පාඩම සකස් කිරීමේදී දෝෂයක් ඇති විය.");
       }
     } finally {
       setIsLoading(false);
     }
-  }, [inputText, ageGroup, callGenerateLesson, vibrate, queueOrWarn]);
+  }, [inputText, ageGroup, sections, callGenerateLesson, vibrate, queueOrWarn]);
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-amber-50 via-orange-50 to-amber-100 px-4 py-8 sm:py-12">
@@ -384,27 +396,57 @@ export default function Home() {
             {/* Age group selector */}
             <div className="w-full space-y-2">
               <p className="text-center text-sm font-semibold text-amber-700">
-                දරුවන්ගේ වයස් කාණ්ඩය
+                කාණ්ඩය
               </p>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {(
                   [
-                    { value: "5-7", label: "අවු. 5-7" },
-                    { value: "8-10", label: "අවු. 8-10" },
+                    { value: "5-7",   label: "අවු. 5-7" },
+                    { value: "8-10",  label: "අවු. 8-10" },
                     { value: "11-12", label: "අවු. 11-12" },
+                    { value: "adult", label: "වැඩිහිටි" },
                   ] as { value: AgeGroup; label: string }[]
                 ).map(({ value, label }) => (
                   <button
                     key={value}
                     type="button"
                     onClick={() => setAgeGroup(value)}
-                    className={`flex-1 rounded-xl border-2 py-2.5 text-base font-bold transition ${
+                    className={`rounded-xl border-2 py-2.5 text-base font-bold transition ${
                       ageGroup === value
                         ? "border-amber-600 bg-amber-600 text-white shadow-md"
                         : "border-amber-200 bg-white text-amber-700 hover:border-amber-400"
                     }`}
                   >
                     {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Section selector */}
+            <div className="w-full space-y-2">
+              <p className="text-center text-sm font-semibold text-amber-700">
+                සකස් කිරීමට ඕනේ කොටස්
+              </p>
+              <div className="flex gap-2">
+                {(
+                  [
+                    { key: "story" as const, label: "කතාව" },
+                    { key: "quiz"  as const, label: "ප්‍රශ්න" },
+                    { key: "image" as const, label: "රූපය" },
+                  ]
+                ).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setSections((prev) => ({ ...prev, [key]: !prev[key] }))}
+                    className={`flex-1 rounded-xl border-2 py-2.5 text-base font-bold transition ${
+                      sections[key]
+                        ? "border-amber-600 bg-amber-600 text-white shadow-md"
+                        : "border-amber-200 bg-white text-amber-500 hover:border-amber-400"
+                    }`}
+                  >
+                    {sections[key] ? "✓ " : ""}{label}
                   </button>
                 ))}
               </div>
@@ -572,7 +614,7 @@ export default function Home() {
             href="/changelog"
             className="text-sm font-medium text-amber-500 underline-offset-4 hover:text-amber-700 hover:underline"
           >
-            අලුත් දේවල් (v1.11)
+            අලුත් දේවල් (v1.12)
           </Link>
         </div>
         <p className="text-xs text-amber-400">නිර්මාණය හා සංවර්ධනය — Prabhath Lokuge</p>

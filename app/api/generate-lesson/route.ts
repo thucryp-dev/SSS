@@ -8,17 +8,12 @@
  *   sections: { story: boolean, quiz: boolean, image: boolean }
  * }
  *
- * Modular output — only generates the sections the teacher actually selected.
- * Bible verse + title are always generated (they're the core of every lesson).
- * Story slides, quiz questions, and image are conditional on `sections`.
- *
- * This saves Gemini tokens, cuts latency, and lets teachers who only need
- * e.g. a verse + image skip waiting for quiz questions they won't use.
+ * Uses the Gemini REST API directly (no SDK) for maximum compatibility
+ * across Vercel environments and Node versions. Tries models in order
+ * until one works.
  */
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { type NextRequest, NextResponse } from "next/server";
-
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -31,13 +26,9 @@ export const maxDuration = 60;
 type AgeGroup = "5-7" | "8-10" | "11-12" | "adult";
 const VALID_AGE_GROUPS: readonly AgeGroup[] = ["5-7", "8-10", "11-12", "adult"];
 
-interface LessonSections {
-  story: boolean;
-  quiz: boolean;
-  image: boolean;
-}
+interface LessonSections { story: boolean; quiz: boolean; image: boolean; }
 
-interface RawGeminiLesson {
+interface RawLesson {
   title: string;
   bible_verse: string;
   story_slides?: string[];
@@ -56,225 +47,230 @@ interface LessonResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Age-group guidance injected into the system prompt
+// Gemini REST API — model fallback chain
 // ---------------------------------------------------------------------------
 
-const AGE_GROUP_GUIDANCE: Record<AgeGroup, string> = {
-  "5-7": `TARGET AGE: 5-7 years old (pre-readers / earliest readers).
-- Use only the simplest, most concrete Sinhala words a 5-year-old already knows in daily speech. No abstract or formal vocabulary.
-- Sentences must be very short (roughly 5-8 words), one simple idea per sentence. Repetition of key words/phrases is good and helps young listeners follow along.
-- Favor concrete sensory details a child can picture: colors, animals, sounds, simple actions.
-- "story_slides" (if requested): exactly 4 short paragraphs, each just 1-2 very short sentences.
-- "quiz_questions" (if requested): extremely simple recall questions about concrete details from the story, answerable in one word.`,
-
-  "8-10": `TARGET AGE: 8-10 years old (early elementary, confident readers).
-- Use clear, simple Sinhala with a moderately richer vocabulary than you'd use for a 5-year-old, but still everyday words — nothing formal or literary.
-- Sentences can have two simple clauses, but stay short and easy to follow.
-- "story_slides" (if requested): exactly 5 paragraphs, 2-3 sentences each.
-- "quiz_questions" (if requested): can ask the child to briefly explain what happened and why, in their own words.`,
-
-  "11-12": `TARGET AGE: 11-12 years old (preteens).
-- Use richer vocabulary and slightly more complex sentence structure — still completely clear and free of English/Singlish, but you may use more descriptive language and convey characters' feelings/motivations.
-- "story_slides" (if requested): exactly 6 paragraphs, 2-4 sentences each.
-- "quiz_questions" (if requested): include at least one open-ended question connecting the lesson to the student's own life or choices.`,
-
-  "adult": `TARGET AUDIENCE: Adult Sunday School students or Bible study participants.
-- Write with the depth appropriate for adult believers — theological insight, historical/cultural context, and honest life application are all welcome.
-- Language should be respectful, clear formal Sinhala — not colloquial or childlike, but never archaic. No English or Singlish.
-- "story_slides" (if requested): exactly 5 paragraphs of 3-5 sentences each. Go beyond surface narrative — explore characters' motivations, theological significance, and what this passage reveals about God's character or plan.
-- "quiz_questions" (if requested): 3 deep, open-ended discussion questions for a group of adults. These should invite personal reflection and shared experience — not simple recall. At least one question should connect the passage directly to a real challenge adults face today.
-- "title": a warm, thoughtful Sinhala title suitable for adult study (may be slightly more literary than a children's title, but still concise — under 8 words).`,
-};
-
-// ---------------------------------------------------------------------------
-// Gemini system prompt — adapts to age group AND requested sections
-// ---------------------------------------------------------------------------
-
-function buildSystemPrompt(ageGroup: AgeGroup, sections: LessonSections): string {
-  const requestedFields: string[] = [
-    `"title": short Sinhala title (always required)`,
-    `"bible_verse": Sinhala rendering of one real relevant verse with reference (always required)`,
-  ];
-  const jsonShape: Record<string, string> = {
-    title: "string in Sinhala",
-    bible_verse: "string in Sinhala",
-  };
-
-  if (sections.story) {
-    requestedFields.push(`"story_slides": array of Sinhala paragraphs telling the story/lesson`);
-    jsonShape.story_slides = '["string in Sinhala", ...]';
-  }
-  if (sections.quiz) {
-    requestedFields.push(`"quiz_questions": array of 3 Sinhala discussion/recall questions`);
-    jsonShape.quiz_questions = '["string in Sinhala", "string in Sinhala", "string in Sinhala"]';
-  }
-  if (sections.image) {
-    requestedFields.push(`"image_prompt": vivid English prompt for an AI image generator`);
-    jsonShape.image_prompt = "string in English";
-  }
-
-  const audienceWord = ageGroup === "adult" ? "adult students" : "children";
-
-  return `You are an expert, warm-hearted Christian Sunday School curriculum writer serving Sinhala-speaking ${audienceWord} in Sri Lanka, in Protestant congregations.
-
-You will receive a short idea, topic, or Bible passage from a teacher. It may be written in Sinhala, Singlish, or English. Produce ONE structured Sunday School lesson tailored to the given audience.
-
-${AGE_GROUP_GUIDANCE[ageGroup]}
-
-STRICT OUTPUT RULES:
-- Respond with ONLY a single valid JSON object. No markdown, no code fences, no commentary.
-- Only include the fields listed below — do not add extra fields.
-- All Sinhala fields must be written in clean, grammatically correct Sinhala. Never mix in English or Singlish.
-- Only reference books from the Protestant 66-book canon (39 OT + 27 NT). Never reference Apocrypha.
-- "bible_verse": your own natural Sinhala rendering, consistent with the ROV (Sri Lanka Bible Society, 1995) tradition — NOT a verbatim quotation of that copyrighted text. Format: verse text — book name chapter:verse in Sinhala.
-${sections.image ? `- "image_prompt": detailed English description for an AI image generator — beautiful, warm, Pixar-style 3D animated art, no text or letters anywhere in the image.` : ""}
-
-REQUESTED FIELDS FOR THIS LESSON:
-${requestedFields.map((f) => `- ${f}`).join("\n")}
-
-Return JSON in EXACTLY this shape (include ONLY these keys):
-${JSON.stringify(jsonShape, null, 2)}`;
-}
-
-// ---------------------------------------------------------------------------
-// Gemini model — try each model in order until one works
-// ---------------------------------------------------------------------------
+const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 const GEMINI_MODELS = [
   "gemini-1.5-flash",
   "gemini-1.5-flash-8b",
-  "gemini-1.5-pro",
   "gemini-2.0-flash-lite",
+  "gemini-1.5-pro",
   "gemini-2.0-flash",
 ];
 
-function getGeminiModel(ageGroup: AgeGroup, sections: LessonSections) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("MISSING_GEMINI_KEY");
-  const genAI = new GoogleGenerativeAI(apiKey);
-  return genAI.getGenerativeModel({
-    model: GEMINI_MODELS[0],
-    systemInstruction: buildSystemPrompt(ageGroup, sections),
-    generationConfig: {
-      responseMimeType: "application/json",
-      temperature: 0.8,
-      maxOutputTokens: 2048,
-    },
-  });
+// ---------------------------------------------------------------------------
+// Age-group guidance
+// ---------------------------------------------------------------------------
+
+const AGE_GUIDANCE: Record<AgeGroup, string> = {
+  "5-7": `TARGET AGE: 5-7 years (pre-readers).
+- Only the simplest, most concrete Sinhala words a 5-year-old knows.
+- Very short sentences (5-8 words), one idea per sentence.
+- story_slides: exactly 4 paragraphs, 1-2 very short sentences each.
+- quiz_questions: single-word-answer recall questions about concrete story details.`,
+
+  "8-10": `TARGET AGE: 8-10 years (early elementary).
+- Clear simple Sinhala, everyday words, short sentences.
+- story_slides: exactly 5 paragraphs, 2-3 sentences each.
+- quiz_questions: brief "what happened and why" questions in the child's own words.`,
+
+  "11-12": `TARGET AGE: 11-12 years (preteens).
+- Richer vocabulary, more descriptive language, characters' feelings and motivations.
+- story_slides: exactly 6 paragraphs, 2-4 sentences each.
+- quiz_questions: at least one open-ended question connecting the lesson to the student's own life.`,
+
+  "adult": `TARGET AUDIENCE: Adult Sunday School / Bible study participants.
+- Theological depth, historical and cultural context, honest life application.
+- Respectful clear formal Sinhala — not colloquial or childlike. Never English/Singlish.
+- story_slides: exactly 5 paragraphs, 3-5 sentences each. Explore characters' motivations,
+  theological significance, and what the passage reveals about God's character.
+- quiz_questions: 3 deep open-ended discussion questions for a group of adults.
+  Connect the passage to real adult challenges today. Not simple recall.
+- title: warm, thoughtful, concise (under 8 words). May be slightly more literary than a children's title.`,
+};
+
+function buildPrompt(ageGroup: AgeGroup, sections: LessonSections): string {
+  const fields: string[] = [
+    `"title": short Sinhala title (always required, under 8 words)`,
+    `"bible_verse": Sinhala rendering of one real relevant verse + reference (always required)`,
+  ];
+  const shape: Record<string, unknown> = {
+    title: "string in Sinhala",
+    bible_verse: "string in Sinhala",
+  };
+  if (sections.story) {
+    fields.push(`"story_slides": Sinhala paragraphs (see age guidance for count/length)`);
+    shape.story_slides = ["string in Sinhala"];
+  }
+  if (sections.quiz) {
+    fields.push(`"quiz_questions": exactly 3 Sinhala questions`);
+    shape.quiz_questions = ["string in Sinhala", "string in Sinhala", "string in Sinhala"];
+  }
+  if (sections.image) {
+    fields.push(`"image_prompt": vivid English prompt for an AI image generator`);
+    shape.image_prompt = "string in English";
+  }
+
+  const audience = ageGroup === "adult" ? "adult Sunday School students" : "Sinhala-speaking children";
+
+  return `You are an expert Christian Sunday School curriculum writer for ${audience} in Sri Lanka (Protestant congregations).
+
+${AGE_GUIDANCE[ageGroup]}
+
+STRICT RULES:
+- Output ONLY a single valid JSON object. No markdown, no fences, no commentary.
+- Include ONLY the fields listed below. No extra fields.
+- All Sinhala fields: clean, grammatically correct Sinhala. Never mix in English or Singlish.
+- Protestant 66-book canon only (no Apocrypha).
+- "bible_verse": your own Sinhala rendering consistent with the ROV (Sri Lanka Bible Society 1995) tradition — NOT verbatim from that copyrighted text. Format: verse text — book name chapter:verse in Sinhala.
+${sections.image ? `- "image_prompt": detailed English description — beautiful warm Pixar-style 3D animated art, no text or letters in the image.` : ""}
+
+REQUIRED OUTPUT FIELDS:
+${fields.map((f) => `- ${f}`).join("\n")}
+
+Return JSON in exactly this shape:
+${JSON.stringify(shape, null, 2)}`;
 }
 
-function cleanJsonText(raw: string): string {
+function cleanJson(raw: string): string {
   return raw.trim()
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
-    .replace(/```$/i, "")
+    .replace(/```\s*$/i, "")
     .trim();
 }
 
-function isValidLesson(data: unknown, sections: LessonSections): data is RawGeminiLesson {
+function isValid(data: unknown, sections: LessonSections): data is RawLesson {
   if (!data || typeof data !== "object") return false;
   const d = data as Record<string, unknown>;
   if (typeof d.title !== "string" || !d.title.trim()) return false;
   if (typeof d.bible_verse !== "string" || !d.bible_verse.trim()) return false;
   if (sections.story) {
     if (!Array.isArray(d.story_slides) || d.story_slides.length === 0) return false;
-    if (!d.story_slides.every((s) => typeof s === "string")) return false;
+    if (!(d.story_slides as unknown[]).every((s) => typeof s === "string")) return false;
   }
   if (sections.quiz) {
     if (!Array.isArray(d.quiz_questions) || d.quiz_questions.length === 0) return false;
-    if (!d.quiz_questions.every((s) => typeof s === "string")) return false;
-  }
-  if (sections.image) {
-    if (typeof d.image_prompt !== "string" || !d.image_prompt.trim()) return false;
+    if (!(d.quiz_questions as unknown[]).every((s) => typeof s === "string")) return false;
   }
   return true;
 }
 
-async function generateLessonFromGemini(
+async function callGemini(
   input: string,
   ageGroup: AgeGroup,
   sections: LessonSections
-): Promise<RawGeminiLesson> {
-  // Try each model in order — whichever the API key has access to will work.
+): Promise<RawLesson> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("MISSING_GEMINI_KEY");
+
+  const systemText = buildPrompt(ageGroup, sections);
+  const userText = `Teacher's idea / topic / Bible passage:\n"""${input}"""`;
+
   let lastError: unknown;
-  for (const modelName of GEMINI_MODELS) {
+
+  for (const model of GEMINI_MODELS) {
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) throw new Error("MISSING_GEMINI_KEY");
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        systemInstruction: buildSystemPrompt(ageGroup, sections),
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.8,
-          maxOutputTokens: 2048,
-        },
+      const res = await fetch(`${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemText }] },
+          contents: [{ role: "user", parts: [{ text: userText }] }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.8,
+            maxOutputTokens: 2048,
+          },
+        }),
+        signal: AbortSignal.timeout(50000),
       });
-      const result = await model.generateContent(
-        `Teacher's idea / topic / Bible passage:\n"""${input}"""`
-      );
-      const text = cleanJsonText(result.response.text());
+
+      const body = await res.json();
+
+      if (!res.ok) {
+        const errMsg = body?.error?.message ?? `HTTP ${res.status}`;
+        console.error(`[generate-lesson] ${model} failed: ${errMsg}`);
+
+        // Auth/key errors — no point trying other models.
+        if (res.status === 400 || res.status === 401 || res.status === 403) {
+          throw new Error(`GEMINI_AUTH_ERROR: ${errMsg}`);
+        }
+        // 404 = model not found for this key tier — try next.
+        if (res.status === 404) { lastError = new Error(errMsg); continue; }
+        // 429 = rate limit — surface immediately.
+        if (res.status === 429) throw new Error(`GEMINI_RATE_LIMIT: ${errMsg}`);
+
+        lastError = new Error(errMsg);
+        continue;
+      }
+
+      // Extract the generated text from the response.
+      const rawText: string =
+        body?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+      if (!rawText) {
+        console.error(`[generate-lesson] ${model} returned empty text`);
+        lastError = new Error("EMPTY_RESPONSE");
+        continue;
+      }
+
       let parsed: unknown;
       try {
-        parsed = JSON.parse(text);
+        parsed = JSON.parse(cleanJson(rawText));
       } catch {
-        throw new Error("INVALID_JSON_FROM_MODEL");
+        console.error(`[generate-lesson] ${model} returned invalid JSON: ${rawText.slice(0, 200)}`);
+        lastError = new Error("INVALID_JSON");
+        continue;
       }
-      if (!isValidLesson(parsed, sections)) throw new Error("INVALID_LESSON_SHAPE");
-      console.log(`✓ Gemini model used: ${modelName}`);
+
+      if (!isValid(parsed, sections)) {
+        console.error(`[generate-lesson] ${model} returned wrong shape:`, parsed);
+        lastError = new Error("INVALID_SHAPE");
+        continue;
+      }
+
+      console.log(`[generate-lesson] ✓ model: ${model}`);
       return parsed;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      // Only fall through to the next model on model-not-found/permission errors.
-      // Hard failures (bad key, rate limit, JSON errors) propagate immediately.
-      if (
-        msg === "MISSING_GEMINI_KEY" ||
-        msg === "INVALID_JSON_FROM_MODEL" ||
-        msg === "INVALID_LESSON_SHAPE" ||
-        msg.includes("API_KEY") ||
-        msg.includes("quota") ||
-        msg.includes("rate")
-      ) {
-        throw err;
+
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.startsWith("GEMINI_AUTH_ERROR") || msg.startsWith("GEMINI_RATE_LIMIT") || msg === "MISSING_GEMINI_KEY") {
+        throw e;
       }
-      console.warn(`Model ${modelName} failed, trying next:`, msg);
-      lastError = err;
+      console.error(`[generate-lesson] ${model} exception: ${msg}`);
+      lastError = e;
     }
   }
+
   throw lastError ?? new Error("All Gemini models failed");
 }
 
 // ---------------------------------------------------------------------------
-// Hugging Face: SDXL illustration
+// Hugging Face image generation
 // ---------------------------------------------------------------------------
 
-const HF_MODEL_URL =
+const HF_URL =
   "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0";
 
-async function generateLessonImage(imagePrompt: string): Promise<string | null> {
-  const apiKey = process.env.HUGGINGFACE_API_KEY;
-  if (!apiKey) return null;
+async function generateImage(prompt: string): Promise<string | null> {
+  const key = process.env.HUGGINGFACE_API_KEY;
+  if (!key) return null;
   try {
-    const res = await fetch(HF_MODEL_URL, {
+    const res = await fetch(HF_URL, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ inputs: imagePrompt, options: { wait_for_model: true } }),
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ inputs: prompt, options: { wait_for_model: true } }),
       signal: AbortSignal.timeout(45000),
     });
-    if (!res.ok) {
-      console.error("HuggingFace image gen failed:", res.status, await res.text());
-      return null;
-    }
-    const contentType = res.headers.get("content-type") ?? "image/jpeg";
-    const arrayBuffer = await res.arrayBuffer();
-    const base64 = Buffer.from(arrayBuffer).toString("base64");
-    return `data:${contentType};base64,${base64}`;
-  } catch (err) {
-    console.error("HuggingFace image gen error:", err);
+    if (!res.ok) { console.error("HF image failed:", res.status); return null; }
+    const ct = res.headers.get("content-type") ?? "image/jpeg";
+    const buf = await res.arrayBuffer();
+    return `data:${ct};base64,${Buffer.from(buf).toString("base64")}`;
+  } catch (e) {
+    console.error("HF image error:", e);
     return null;
   }
 }
@@ -284,19 +280,18 @@ async function generateLessonImage(imagePrompt: string): Promise<string | null> 
 // ---------------------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
-  const clientIp = getClientIp(req.headers);
-  const rateLimit = checkRateLimit(clientIp);
-  if (!rateLimit.allowed) {
+  const ip = getClientIp(req.headers);
+  const rl = checkRateLimit(ip);
+  if (!rl.allowed) {
     return NextResponse.json(
       { error: "ඉල්ලීම් ගණන සීමාව ඉක්මවා ඇත. කරුණාකර මඳ වෙලාවක් රැඳී නැවත උත්සාහ කරන්න." },
-      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } }
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } }
     );
   }
 
   let body: { input?: unknown; ageGroup?: unknown; sections?: unknown };
-  try {
-    body = await req.json();
-  } catch {
+  try { body = await req.json(); }
+  catch {
     return NextResponse.json(
       { error: "ඉල්ලීම කියවීමට නොහැකි විය. කරුණාකර නැවත උත්සාහ කරන්න." },
       { status: 400 }
@@ -304,55 +299,41 @@ export async function POST(req: NextRequest) {
   }
 
   const input = typeof body.input === "string" ? body.input.trim() : "";
-  if (!input) {
-    return NextResponse.json(
-      { error: "කරුණාකර පාඩම සඳහා කෙටි විස්තරයක් කථා කරන්න හෝ ලියන්න." },
-      { status: 400 }
-    );
-  }
-  if (input.length > 2000) {
-    return NextResponse.json(
-      { error: "විස්තරය ඉතා දීර්ඝයි. කරුණාකර කෙටි කරන්න." },
-      { status: 400 }
-    );
-  }
+  if (!input) return NextResponse.json({ error: "කරුණාකර විස්තරයක් ලියන්න හෝ කථා කරන්න." }, { status: 400 });
+  if (input.length > 2000) return NextResponse.json({ error: "විස්තරය ඉතා දීර්ඝයි." }, { status: 400 });
 
   const ageGroup: AgeGroup = VALID_AGE_GROUPS.includes(body.ageGroup as AgeGroup)
-    ? (body.ageGroup as AgeGroup)
-    : "8-10";
+    ? (body.ageGroup as AgeGroup) : "8-10";
 
-  // Parse sections — default all to true so old clients still get full lessons.
-  const rawSections = body.sections && typeof body.sections === "object"
-    ? (body.sections as Record<string, unknown>)
-    : {};
+  const raw = body.sections && typeof body.sections === "object"
+    ? (body.sections as Record<string, unknown>) : {};
   const sections: LessonSections = {
-    story: rawSections.story !== false,
-    quiz: rawSections.quiz !== false,
-    image: rawSections.image !== false,
+    story: raw.story !== false,
+    quiz:  raw.quiz  !== false,
+    image: raw.image !== false,
   };
 
-  // At least one section must be requested besides the always-included title+verse.
   if (!sections.story && !sections.quiz && !sections.image) {
-    return NextResponse.json(
-      { error: "කරුණාකර අවම වශයෙන් එක් කොටසක් හෝ තෝරන්න." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "කරුණාකර අවම වශයෙන් එක් කොටසක් හෝ තෝරන්න." }, { status: 400 });
   }
 
-  let lesson: RawGeminiLesson;
+  let lesson: RawLesson;
   try {
-    lesson = await generateLessonFromGemini(input, ageGroup, sections);
+    lesson = await callGemini(input, ageGroup, sections);
   } catch (err) {
-    console.error("Gemini generation error:", err);
     const msg = err instanceof Error ? err.message : "";
-    const errorText = msg === "MISSING_GEMINI_KEY"
-      ? "සේවාදායක සැකසුම් දෝෂයකි. කරුණාකර පසුව උත්සාහ කරන්න."
-      : "පාඩම සකස් කිරීමේදී දෝෂයක් ඇති විය. කරුණාකර නැවත උත්සාහ කරන්න.";
-    return NextResponse.json({ error: errorText }, { status: 502 });
+    console.error("[generate-lesson] Final error:", msg);
+
+    let sinhala = "පාඩම සකස් කිරීමේදී දෝෂයක් ඇති විය. කරුණාකර නැවත උත්සාහ කරන්න.";
+    if (msg === "MISSING_GEMINI_KEY") sinhala = "සේවාදායක සැකසුම් දෝෂයකි.";
+    if (msg.startsWith("GEMINI_AUTH_ERROR")) sinhala = "Gemini API key එක වලංගු නෙවෙයි. Vercel environment variables බලන්න.";
+    if (msg.startsWith("GEMINI_RATE_LIMIT")) sinhala = "Gemini ඉල්ලීම් සීමාව ඉක්මවා ඇත. මඳ වෙලාවකින් නැවත උත්සාහ කරන්න.";
+
+    return NextResponse.json({ error: sinhala }, { status: 502 });
   }
 
   const image_url = sections.image && lesson.image_prompt
-    ? await generateLessonImage(lesson.image_prompt)
+    ? await generateImage(lesson.image_prompt)
     : null;
 
   const response: LessonResponse = {

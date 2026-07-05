@@ -18,6 +18,20 @@ tooling — but they follow the same conceptual meaning as SemVer:
 _Add new entries here as you make changes — then move them under a new
 version heading below once you're ready to consider them "shipped."_
 
+## [1.12.1] - 2026-07-04
+### Fixed
+- Replaced `@google/generative-ai` SDK with a direct REST `fetch` call to
+  the Gemini API. The SDK introduced version-compatibility uncertainty on
+  Vercel (package resolution, Node runtime behaviour) that was masking
+  the real error. Direct REST is explicit, dependency-free, and logs the
+  exact HTTP status + error message from Google for every failed attempt.
+- Added `/api/test-gemini` diagnostic endpoint: visit
+  `https://YOUR-APP.vercel.app/api/test-gemini` in a browser to see which
+  models your API key can access and the exact error text for each failure.
+- Improved Sinhala error messages per failure type (auth error vs. rate
+  limit vs. general failure).
+- Removed `@google/generative-ai` from `package.json` — no longer needed.
+
 ## [1.12.0] - 2026-07-04
 ### Added
 - **Adult age group** ("වැඩිහිටි"): fourth option alongside the three

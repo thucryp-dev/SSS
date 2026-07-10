@@ -17,7 +17,7 @@
  *      LessonPresentation to present it to the class.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { BookHeart, Loader2, Mic, Sparkles, Square, WifiOff } from "lucide-react";
@@ -64,14 +64,6 @@ declare global {
 
 const SILENCE_TIMEOUT_MS = 3000;
 
-const LOADING_MESSAGES = [
-  "ඔබේ අදහස විශ්ලේෂණය කරමින්...",
-  "කතාව ලියමින්...",
-  "ප්‍රශ්න සකස් කරමින්...",
-  "චිත්‍රය සකස් කරමින්...",
-  "මඳක් රැඳී සිටින්න...",
-];
-
 export default function Home() {
   const [inputText, setInputText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -97,17 +89,26 @@ export default function Home() {
   }, []);
 
   // ---- Rotating status text while waiting on Gemini + the image model ----
-  // (typically 10-30s) so the wait feels less like a frozen screen.
+  // Messages are filtered to only mention sections the teacher actually selected.
+  const loadingMessages = useMemo(() => {
+    const msgs = ["ඔබේ අදහස විශ්ලේෂණය කරමින්..."];
+    if (sections.story) msgs.push("කතාව ලියමින්...");
+    if (sections.quiz)  msgs.push("ප්‍රශ්න සකස් කරමින්...");
+    if (sections.image) msgs.push("චිත්‍රය සකස් කරමින්...");
+    msgs.push("මඳක් රැඳී සිටින්න...");
+    return msgs;
+  }, [sections]);
+
   useEffect(() => {
     if (!isLoading) {
       setLoadingMessageIndex(0);
       return;
     }
     const interval = setInterval(() => {
-      setLoadingMessageIndex((i) => (i + 1) % LOADING_MESSAGES.length);
+      setLoadingMessageIndex((i) => (i + 1) % loadingMessages.length);
     }, 2500);
     return () => clearInterval(interval);
-  }, [isLoading]);
+  }, [isLoading, loadingMessages.length]);
 
   // ---- Core generation call ----------------------------------------------
   const callGenerateLesson = useCallback(async (
@@ -536,7 +537,7 @@ export default function Home() {
 
             {isLoading && (
               <p className="text-center text-sm text-amber-600" aria-live="polite">
-                {LOADING_MESSAGES[loadingMessageIndex]}
+                {loadingMessages[loadingMessageIndex]}
               </p>
             )}
           </CardContent>
@@ -614,8 +615,7 @@ export default function Home() {
             href="/changelog"
             className="text-sm font-medium text-amber-500 underline-offset-4 hover:text-amber-700 hover:underline"
           >
-            අලුත් දේවල් (v1.12)
-          </Link>
+            අලුත් දේවල් (v1.12)          </Link>
         </div>
         <p className="text-xs text-amber-400">නිර්මාණය හා සංවර්ධනය — Prabhath Lokuge</p>
         <p className="text-xs text-amber-400">© 2026 සියලුම හිමිකම් ඇවිරිණි</p>

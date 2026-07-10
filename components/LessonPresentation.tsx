@@ -48,13 +48,21 @@ type Slide = { type: "cover" } | { type: "story"; text: string; index: number } 
 const SWIPE_CONFIDENCE_THRESHOLD = 8000;
 
 export default function LessonPresentation({ lesson, onClose }: LessonPresentationProps) {
+  // Only build slides for sections that were actually generated.
+  // lesson.sections may be undefined for lessons saved before v1.12.
+  const hasStory = (lesson.sections?.story !== false) && lesson.story_slides.length > 0;
+  const hasQuiz  = (lesson.sections?.quiz  !== false) && lesson.quiz_questions.length > 0;
+
   const slides: Slide[] = useMemo(
     () => [
       { type: "cover" },
-      ...lesson.story_slides.map((text, index) => ({ type: "story" as const, text, index })),
-      { type: "quiz" },
+      ...(hasStory
+        ? lesson.story_slides.map((text, index) => ({ type: "story" as const, text, index }))
+        : []),
+      ...(hasQuiz ? [{ type: "quiz" as const }] : []),
     ],
-    [lesson.story_slides]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lesson.story_slides, lesson.quiz_questions, hasStory, hasQuiz]
   );
 
   const [current, setCurrent] = useState(0);
@@ -126,7 +134,7 @@ export default function LessonPresentation({ lesson, onClose }: LessonPresentati
 
   // ---- Share ---------------------------------------------------------------------
   const handleShare = async () => {
-    const summary = lesson.story_slides[0] ?? "";
+    const summary = lesson.story_slides[0] ?? lesson.bible_verse;
     const link = lesson.id ? `\n\n${window.location.origin}/lesson/${lesson.id}` : "";
     const shareText = `📖 ${lesson.title}\n\n✨ ${lesson.bible_verse}\n\n${summary}${link}\n\n— දහම් පාසල් සහායක`;
 
@@ -377,7 +385,7 @@ function CoverSlide({
       <h2 className="text-2xl font-bold text-amber-900 sm:text-3xl">{lesson.title}</h2>
       {lesson.age_group && (
         <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-700">
-          අවු. {lesson.age_group}
+          {lesson.age_group === "adult" ? "වැඩිහිටි" : `අවු. ${lesson.age_group}`}
         </span>
       )}
       <p className="rounded-xl bg-amber-50 px-4 py-3 text-lg font-medium text-amber-800">
@@ -451,6 +459,9 @@ function QuizSlide({
 }
 
 function PrintableLesson({ lesson }: { lesson: LessonData }) {
+  const hasStory = lesson.story_slides.length > 0;
+  const hasQuiz  = lesson.quiz_questions.length > 0;
+
   return (
     <div id="printable-lesson-root" className="mx-auto max-w-2xl space-y-4 bg-white p-8 text-stone-900">
       {lesson.image_url && (
@@ -458,27 +469,40 @@ function PrintableLesson({ lesson }: { lesson: LessonData }) {
         <img src={lesson.image_url} alt="" className="h-64 w-full rounded-xl object-cover" />
       )}
       <h1 className="text-3xl font-bold">{lesson.title}</h1>
+      {lesson.age_group && (
+        <p className="text-sm font-bold text-amber-700">
+          {lesson.age_group === "adult" ? "වැඩිහිටි" : `අවු. ${lesson.age_group}`}
+        </p>
+      )}
       <p className="text-lg font-medium italic">{lesson.bible_verse}</p>
       <p className="text-xs text-stone-500">
         මෙම පදයේ නිවැරදි වචන සඳහා කරුණාකර ශුද්ධ බයිබලය පරීක්ෂා කරන්න.
       </p>
-      <hr className="border-stone-300" />
-      <div className="space-y-3">
-        {lesson.story_slides.map((paragraph, i) => (
-          <p key={i} className="text-base leading-relaxed">
-            {paragraph}
-          </p>
-        ))}
-      </div>
-      <hr className="border-stone-300" />
-      <div>
-        <h2 className="mb-2 text-xl font-bold">අවබෝධතා ප්‍රශ්න</h2>
-        <ol className="list-inside list-decimal space-y-1 text-base">
-          {lesson.quiz_questions.map((q, i) => (
-            <li key={i}>{q}</li>
-          ))}
-        </ol>
-      </div>
+
+      {hasStory && (
+        <>
+          <hr className="border-stone-300" />
+          <div className="space-y-3">
+            {lesson.story_slides.map((paragraph, i) => (
+              <p key={i} className="text-base leading-relaxed">{paragraph}</p>
+            ))}
+          </div>
+        </>
+      )}
+
+      {hasQuiz && (
+        <>
+          <hr className="border-stone-300" />
+          <div>
+            <h2 className="mb-2 text-xl font-bold">අවබෝධතා ප්‍රශ්න</h2>
+            <ol className="list-inside list-decimal space-y-1 text-base">
+              {lesson.quiz_questions.map((q, i) => (
+                <li key={i}>{q}</li>
+              ))}
+            </ol>
+          </div>
+        </>
+      )}
     </div>
   );
 }

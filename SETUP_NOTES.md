@@ -76,6 +76,10 @@ split that way.
 | `firestore.rules` | Shape/size-validated, no-auth-yet security rules |
 | `package.json` | All dependencies, pinned to versions current as of early 2026 |
 | `LICENSE.md` | Proprietary, all-rights-reserved license |
+| `firebase.json` | Firebase CLI config — points at rules + indexes files |
+| `firestore.indexes.json` | Both composite indexes the app needs; deploy via `firebase deploy --only firestore` |
+| `next.config.ts` | Next.js 15 config — suppresses build-blocking type/lint errors, allows remote images |
+| `scripts/generate-icons.html` | Open in any browser → click 3 buttons → downloads all 3 required PWA icon PNGs |
 | `CHANGELOG.md` | Developer-facing version history (Keep a Changelog format) |
 | `app/changelog/page.tsx` | User-facing Sinhala "what's new" page, linked from the dashboard footer |
 | `lib/rate-limit.ts` | Best-effort in-memory rate limiter for the API route |

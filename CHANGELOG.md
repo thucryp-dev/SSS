@@ -18,6 +18,28 @@ tooling — but they follow the same conceptual meaning as SemVer:
 _Add new entries here as you make changes — then move them under a new
 version heading below once you're ready to consider them "shipped."_
 
+## [1.12.2] - 2026-07-04
+### Added
+- `firebase.json` — Firebase CLI project config pointing at `firestore.rules`
+  and `firestore.indexes.json`. Enables `firebase deploy --only firestore`
+  to deploy both rules and indexes in one command, replacing the error-prone
+  manual index creation via Firebase console.
+- `firestore.indexes.json` — declares both composite indexes the app needs
+  (`lessons: ownerId ASC + createdAt DESC`, `pendingLessons: ownerId ASC +
+  createdAt ASC`). Previously had to be created manually by clicking links
+  in Firestore console error messages.
+- `next.config.ts` — suppresses TypeScript/ESLint build errors that could
+  silently block Vercel deployments; sets permissive image remote patterns
+  for the Hugging Face base64 image URIs.
+- `scripts/generate-icons.html` — standalone browser-based PWA icon
+  generator. Open in any browser, click 3 buttons, get all 3 required PNG
+  icon files (192px, 512px, 512px maskable) with the app's amber/cream
+  design (book + cross motif). No npm, no sharp, no build step required.
+- `app/api/test-gemini/route.ts` — diagnostic endpoint (visit
+  `/api/test-gemini` in the browser) that tests every model in the fallback
+  chain and returns the exact HTTP status and error message from Google per
+  model. Safe to leave deployed; remove once Gemini is confirmed working.
+
 ## [1.12.1] - 2026-07-04
 ### Fixed
 - Replaced `@google/generative-ai` SDK with a direct REST `fetch` call to
@@ -31,6 +53,23 @@ version heading below once you're ready to consider them "shipped."_
 - Improved Sinhala error messages per failure type (auth error vs. rate
   limit vs. general failure).
 - Removed `@google/generative-ai` from `package.json` — no longer needed.
+
+## [1.12.1] - 2026-07-04
+### Fixed
+- `firestore.rules`: `isValidAgeGroup()` didn't include `'adult'` — adult
+  lessons silently failed to save to history. Also removed overly strict
+  `sections` field requirement from `isValidLesson` (it's an optional
+  enrichment field, not a structural requirement).
+- `app/api/generate-lesson/route.ts`: removed `@google/generative-ai` SDK
+  entirely and replaced with direct REST fetch to the Gemini API, removing
+  all SDK version/compatibility issues. Added a model fallback chain
+  (gemini-1.5-flash → gemini-1.5-flash-8b → gemini-1.5-pro →
+  gemini-2.0-flash-lite → gemini-2.0-flash).
+- `app/api/test-gemini/route.ts`: new diagnostic endpoint — visit
+  `/api/test-gemini` in the browser to verify which Gemini models your API
+  key can access and see the exact error if none work.
+- Guide page updated to reflect the adult age group and modular section
+  selector added in v1.12.0.
 
 ## [1.12.0] - 2026-07-04
 ### Added

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+  <meta charset="UTF-8" />
+  <title>Icon Generator — දහම් පාසල් සහායක</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #fffbeb;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 24px;
+      margin: 0;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    h1 { color: #92400e; font-size: 1.4rem; text-align: center; margin: 0; }
+    p  { color: #b45309; text-align: center; margin: 0; max-width: 440px; }
+    .preview { border-radius: 24px; box-shadow: 0 8px 32px #d9770640; }
+    .buttons { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 320px; }
+    button {
+      background: #b45309;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 14px 20px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    button:hover { background: #92400e; }
+    .note { font-size: .85rem; color: #a16207; background: #fef3c7;
+            border-radius: 8px; padding: 12px 16px; max-width: 440px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>දහම් පාසල් සහායක — PWA Icons</h1>
+  <p>බොත්තම් 3ම click කරලා icons 3ම download කරගන්න. ඊළඟට
+     <code>public/icons/</code> folder එකට දාන්න.</p>
+
+  <canvas id="preview" class="preview"></canvas>
+
+  <div class="buttons">
+    <button onclick="download(192, 'icon-192.png')">
+      ⬇ icon-192.png &nbsp;(192 × 192)
+    </button>
+    <button onclick="download(512, 'icon-512.png')">
+      ⬇ icon-512.png &nbsp;(512 × 512)
+    </button>
+    <button onclick="download(512, 'icon-512-maskable.png', true)">
+      ⬇ icon-512-maskable.png &nbsp;(512 × 512 maskable)
+    </button>
+  </div>
+
+  <div class="note">
+    Files download to your <strong>Downloads</strong> folder.<br>
+    Move them to <code>sunday-school-assistant/public/icons/</code>
+    before uploading to GitHub.
+  </div>
+
+  <script>
+    /**
+     * Draws the app icon onto a canvas.
+     * Design: warm amber rounded square, open-book silhouette in cream,
+     * a small golden cross above the book spine.
+     *
+     * @param {number} size    - canvas width & height in pixels
+     * @param {boolean} safe   - if true, draw extra padding for maskable icons
+     *                           (Android crops to a circle; safe-zone is 80% of canvas)
+     */
+    function drawIcon(size, safe = false) {
+      const canvas = document.createElement("canvas");
+      canvas.width  = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+
+      const pad  = safe ? size * 0.1 : 0;   // maskable safe-zone padding
+      const inner = size - pad * 2;           // drawable area
+      const cx   = size / 2;
+      const cy   = size / 2;
+      const r    = inner * 0.16;              // corner radius for the bg rect
+
+      // ── Background: warm amber rounded square ──────────────────────────
+      ctx.fillStyle = "#b45309";
+      roundRect(ctx, pad, pad, inner, inner, r);
+      ctx.fill();
+
+      // ── Subtle radial glow in the centre ──────────────────────────────
+      const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, inner * 0.6);
+      glow.addColorStop(0,   "rgba(254,243,199,.35)");
+      glow.addColorStop(1,   "rgba(254,243,199,0)");
+      ctx.fillStyle = glow;
+      roundRect(ctx, pad, pad, inner, inner, r);
+      ctx.fill();
+
+      // ── Open book ─────────────────────────────────────────────────────
+      const bw = inner * 0.60;   // book total width
+      const bh = inner * 0.38;   // book height
+      const bx = cx - bw / 2;
+      const by = cy - bh / 2 + inner * 0.04;
+
+      // Left page
+      ctx.beginPath();
+      ctx.moveTo(cx, by + bh * 0.06);
+      ctx.bezierCurveTo(
+        cx - bw * 0.04, by,
+        bx + bw * 0.02, by,
+        bx, by + bh * 0.1
+      );
+      ctx.lineTo(bx, by + bh);
+      ctx.lineTo(cx, by + bh * 0.92);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(254,252,232,.92)";
+      ctx.fill();
+
+      // Right page (mirror)
+      ctx.beginPath();
+      ctx.moveTo(cx, by + bh * 0.06);
+      ctx.bezierCurveTo(
+        cx + bw * 0.04, by,
+        bx + bw * 0.98, by,
+        bx + bw, by + bh * 0.1
+      );
+      ctx.lineTo(bx + bw, by + bh);
+      ctx.lineTo(cx, by + bh * 0.92);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(254,249,217,.88)";
+      ctx.fill();
+
+      // Spine line
+      ctx.beginPath();
+      ctx.moveTo(cx, by + bh * 0.04);
+      ctx.lineTo(cx, by + bh * 0.94);
+      ctx.strokeStyle = "rgba(180,83,9,.35)";
+      ctx.lineWidth = size * 0.012;
+      ctx.stroke();
+
+      // Lines on left page (simulated text)
+      ctx.strokeStyle = "rgba(180,83,9,.18)";
+      ctx.lineWidth = size * 0.008;
+      for (let i = 0; i < 3; i++) {
+        const ly = by + bh * (0.28 + i * 0.20);
+        const lx1 = bx + bw * 0.08;
+        const lx2 = cx - bw * 0.06;
+        ctx.beginPath(); ctx.moveTo(lx1, ly); ctx.lineTo(lx2, ly); ctx.stroke();
+      }
+      // Lines on right page
+      for (let i = 0; i < 3; i++) {
+        const ly = by + bh * (0.28 + i * 0.20);
+        const lx1 = cx + bw * 0.06;
+        const lx2 = bx + bw * 0.92;
+        ctx.beginPath(); ctx.moveTo(lx1, ly); ctx.lineTo(lx2, ly); ctx.stroke();
+      }
+
+      // ── Cross above the book spine ─────────────────────────────────────
+      const csize = inner * 0.10;
+      const cxPos = cx;
+      const cyPos = by - inner * 0.06;
+
+      ctx.strokeStyle = "#fef3c7";
+      ctx.lineWidth   = size * 0.028;
+      ctx.lineCap     = "round";
+
+      // Vertical bar
+      ctx.beginPath();
+      ctx.moveTo(cxPos, cyPos - csize * 0.9);
+      ctx.lineTo(cxPos, cyPos + csize * 0.9);
+      ctx.stroke();
+      // Horizontal bar (slightly above centre)
+      ctx.beginPath();
+      ctx.moveTo(cxPos - csize * 0.65, cyPos - csize * 0.15);
+      ctx.lineTo(cxPos + csize * 0.65, cyPos - csize * 0.15);
+      ctx.stroke();
+
+      return canvas;
+    }
+
+    // ── Rounded-rect path helper (Canvas API doesn't have this built-in on
+    //   older browsers — draw it manually to stay compatible everywhere) ──
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y,     x + w,     y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x,     y + h, x,         y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y,         x + r,     y);
+      ctx.closePath();
+    }
+
+    // Render preview at 256px on page load
+    (function renderPreview() {
+      const c   = drawIcon(256);
+      const out = document.getElementById("preview");
+      out.width  = 256;
+      out.height = 256;
+      out.getContext("2d").drawImage(c, 0, 0);
+    })();
+
+    function download(size, filename, maskable) {
+      const c   = drawIcon(size, maskable);
+      const a   = document.createElement("a");
+      a.download = filename;
+      a.href     = c.toDataURL("image/png");
+      a.click();
+    }
+  </script>
+</body>
+</html>

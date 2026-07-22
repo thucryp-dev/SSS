@@ -76,28 +76,31 @@ export type AgeGroup = "5-7" | "8-10" | "11-12" | "adult";
 
 /** Which output sections the teacher requested — determines what the API generates. */
 export interface LessonSections {
-  story: boolean;
-  quiz: boolean;
-  image: boolean;
+  story:      boolean;
+  quiz:       boolean;
+  image:      boolean;
+  activities: boolean;
 }
 
 /** The structured shape returned by /api/generate-lesson and rendered by the UI. */
 export interface LessonData {
-  title: string;
-  bible_verse: string;
-  story_slides: string[];
+  title:          string;
+  bible_verse:    string;
+  memory_verse:   string;
+  story_slides:   string[];
   quiz_questions: string[];
-  image_url: string | null;
-  age_group: AgeGroup;
-  sections: LessonSections;
+  activity_ideas: string[];
+  image_url:      string | null;
+  age_group:      AgeGroup;
+  sections:       LessonSections;
 }
 
 /** A lesson request waiting to be sent to the AI engine (saved while offline). */
 export interface PendingLessonRequest {
-  id: string;
+  id:        string;
   inputText: string;
-  ageGroup: AgeGroup;
-  sections: LessonSections;
+  ageGroup:  AgeGroup;
+  sections:  LessonSections;
   createdAt: number;
 }
 
@@ -305,7 +308,7 @@ export async function getPendingLessons(): Promise<PendingLessonRequest[]> {
   );
   const snapshot = await getDocs(q);
 
-  const DEFAULT_SECTIONS: LessonSections = { story: true, quiz: true, image: true };
+  const DEFAULT_SECTIONS: LessonSections = { story: true, quiz: true, image: true, activities: true };
 
   return snapshot.docs.map((d) => {
     const data = d.data() as {
@@ -382,8 +385,21 @@ export async function getLessonHistory(limitCount = 20): Promise<SavedLesson[]> 
   const snapshot = await getDocs(q);
 
   return snapshot.docs.slice(0, limitCount).map((d) => {
-    const data = d.data() as LessonData & { inputText: string; createdAt: number };
-    return { id: d.id, ...data };
+    const data = d.data() as Partial<LessonData> & { inputText: string; createdAt: number };
+    return {
+      id: d.id,
+      title:          data.title          ?? "",
+      bible_verse:    data.bible_verse    ?? "",
+      memory_verse:   data.memory_verse   ?? "",           // new in v2.0 — default for old docs
+      story_slides:   data.story_slides   ?? [],
+      quiz_questions: data.quiz_questions ?? [],
+      activity_ideas: data.activity_ideas ?? [],           // new in v2.0 — default for old docs
+      image_url:      data.image_url      ?? null,
+      age_group:      data.age_group      ?? "8-10",
+      sections:       data.sections       ?? { story: true, quiz: true, image: true, activities: false },
+      inputText:      data.inputText,
+      createdAt:      data.createdAt,
+    };
   });
 }
 
@@ -391,11 +407,8 @@ export async function getLessonHistory(limitCount = 20): Promise<SavedLesson[]> 
  * Fetches a single lesson by ID — powers the shareable /lesson/[id] route.
  * Deliberately NOT owner-scoped: anyone with the link should be able to
  * view that one specific lesson, regardless of who created it.
- * firestore.rules enforces this exact distinction (open `get`, owner-only
- * `list`) — see that file's comments. Returns null both when Firebase
- * isn't configured and when the document genuinely doesn't exist, so the
- * page can show one honest "not available" state either way without
- * distinguishing the two to the visitor.
+ * Also handles old documents missing v2.0 fields (memory_verse, activity_ideas)
+ * by supplying safe defaults, so /lesson/[id] links to pre-v2.0 lessons don't crash.
  */
 export async function getLessonById(id: string): Promise<SavedLesson | null> {
   if (!isFirebaseConfigured) return null;
@@ -404,8 +417,21 @@ export async function getLessonById(id: string): Promise<SavedLesson | null> {
   const snapshot = await getDoc(doc(firestore, HISTORY_COLLECTION, id));
   if (!snapshot.exists()) return null;
 
-  const data = snapshot.data() as LessonData & { inputText: string; createdAt: number };
-  return { id: snapshot.id, ...data };
+  const data = snapshot.data() as Partial<LessonData> & { inputText: string; createdAt: number };
+  return {
+    id: snapshot.id,
+    title:          data.title          ?? "",
+    bible_verse:    data.bible_verse    ?? "",
+    memory_verse:   data.memory_verse   ?? "",
+    story_slides:   data.story_slides   ?? [],
+    quiz_questions: data.quiz_questions ?? [],
+    activity_ideas: data.activity_ideas ?? [],
+    image_url:      data.image_url      ?? null,
+    age_group:      data.age_group      ?? "8-10",
+    sections:       data.sections       ?? { story: true, quiz: true, image: true, activities: false },
+    inputText:      data.inputText,
+    createdAt:      data.createdAt,
+  };
 }
 
 /** Converts a Firestore Timestamp (or epoch millis) into a Sinhala-locale date string. */

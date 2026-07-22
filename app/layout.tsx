@@ -34,6 +34,19 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   authors: [{ name: "Prabhath Lokuge" }],
   creator: "Prabhath Lokuge",
+  keywords: ["Sunday school", "Bible", "Sinhala", "lesson", "church", "Sri Lanka", "ළමා", "දහම් පාඩශාලාව"],
+  openGraph: {
+    type: "website",
+    locale: "si_LK",
+    title: "දහම් පාසල් සහායක",
+    description: "ගුරුවරුන් සඳහා ස්වයංක්‍රීයව සිංහල බයිබල් පාඩම් සකස් කරන AI සහායකය",
+    siteName: "දහම් පාසල් සහායක",
+  },
+  twitter: {
+    card: "summary",
+    title: "දහම් පාසල් සහායක",
+    description: "ගුරුවරුන් සඳහා ස්වයංක්‍රීයව සිංහල බයිබල් පාඩම් සකස් කරන AI සහායකය",
+  },
   appleWebApp: {
     capable: true,
     title: "දහම් පාසල් සහායක",

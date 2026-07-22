@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="100" fill="#b45309"/>
+  <rect x="40" y="40" width="432" height="432" rx="70" fill="#d97706"/>
+  <!-- Open book -->
+  <path d="M120 170 C120 155 130 145 145 145 L245 145 L245 370 L145 370 C130 370 120 360 120 345 Z" fill="#fffbeb" opacity="0.95"/>
+  <path d="M392 170 C392 155 382 145 367 145 L267 145 L267 370 L367 370 C382 370 392 360 392 345 Z" fill="#fef3c7" opacity="0.95"/>
+  <!-- Spine -->
+  <rect x="245" y="145" width="22" height="225" rx="3" fill="#92400e"/>
+  <!-- Lines on left page -->
+  <rect x="145" y="190" width="80" height="8" rx="4" fill="#d97706" opacity="0.5"/>
+  <rect x="145" y="215" width="90" height="8" rx="4" fill="#d97706" opacity="0.5"/>
+  <rect x="145" y="240" width="70" height="8" rx="4" fill="#d97706" opacity="0.5"/>
+  <rect x="145" y="265" width="85" height="8" rx="4" fill="#d97706" opacity="0.5"/>
+  <rect x="145" y="290" width="60" height="8" rx="4" fill="#d97706" opacity="0.5"/>
+  <!-- Lines on right page -->
+  <rect x="280" y="190" width="80" height="8" rx="4" fill="#d97706" opacity="0.5"/>
+  <rect x="280" y="215" width="70" height="8" rx="4" fill="#d97706" opacity="0.5"/>
+  <rect x="280" y="240" width="90" height="8" rx="4" fill="#d97706" opacity="0.5"/>
+  <rect x="280" y="265" width="65" height="8" rx="4" fill="#d97706" opacity="0.5"/>
+  <rect x="280" y="290" width="80" height="8" rx="4" fill="#d97706" opacity="0.5"/>
+  <!-- Cross on right page -->
+  <rect x="302" y="310" width="46" height="10" rx="5" fill="#b45309" opacity="0.7"/>
+  <rect x="320" y="300" width="10" height="30" rx="5" fill="#b45309" opacity="0.7"/>
+  <!-- Star sparkle top right -->
+  <circle cx="400" cy="120" r="12" fill="#fef9c3"/>
+  <path d="M400 104 L403 115 L415 115 L406 122 L409 133 L400 127 L391 133 L394 122 L385 115 L397 115 Z" fill="#fbbf24"/>
+</svg>

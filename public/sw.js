@@ -17,7 +17,7 @@
  * Registered from components/ServiceWorkerRegister.tsx.
  */
 
-const CACHE_NAME = "dahampasala-shell-v1";
+const CACHE_NAME = "dahampasala-shell-v2";
 const APP_SHELL = ["/", "/manifest.json"];
 
 self.addEventListener("install", (event) => {

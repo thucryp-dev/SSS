@@ -93,9 +93,17 @@ split that way.
   `icon-512.png`, and `icon-512-maskable.png`. These need to be real PNG
   files — generate or design them and drop them in; nothing in this repo
   creates binary image assets.
-- **Gemini model name**: `app/api/generate-lesson/route.ts` uses
-  `"gemini-2.0-flash"`. Confirm the current model name your API key can
-  access in Google AI Studio and swap it in if needed.
+- **Gemini API key format (June 2026+)**: New keys from Google AI Studio
+  start with `AQ.Ab...` and require `Authorization: Bearer` — not the old
+  `?key=` query param. The route auto-detects the prefix and uses the right
+  method, so both old (`AIza...`) and new (`AQ.Ab...`) keys work. If lesson
+  generation returns 502, visit `/api/test-gemini` in the browser — it
+  tests all 6 models in the fallback chain and shows the exact error for
+  each one.
+- **Gemini model fallback chain**: `gemini-2.5-flash` → `gemini-2.5-flash-lite-preview-06-17`
+  → `gemini-2.0-flash` → `gemini-2.0-flash-lite` → `gemini-1.5-flash` →
+  `gemini-1.5-flash-8b`. The first model your key can access is used
+  automatically — no manual swapping needed.
 - **Hugging Face cold starts**: the first SDXL request after idle time can
   take 20–30s while the model loads. The route already sets
   `wait_for_model: true` and a 45s timeout; consider a periodic warm-up

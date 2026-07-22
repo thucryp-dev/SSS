@@ -18,6 +18,56 @@ tooling — but they follow the same conceptual meaning as SemVer:
 _Add new entries here as you make changes — then move them under a new
 version heading below once you're ready to consider them "shipped."_
 
+## [2.1.0] - 2026-07-20
+### Added
+- `app/not-found.tsx` — custom Sinhala 404 page (was Next.js default English before)
+- `app/error.tsx` — custom Sinhala error boundary for uncaught page errors
+- `app/history/loading.tsx` — animated skeleton while Firebase fetches history
+- `app/lesson/[id]/loading.tsx` — spinner while shared lesson loads
+- `app/lesson/[id]/page.tsx` refactored to **server component** — exports
+  `generateMetadata` which fetches lesson title + Bible verse via the
+  Firestore REST API (`allow get: if true` means no auth needed). WhatsApp
+  and social link previews now show the actual lesson title and verse instead
+  of the generic app description.
+- `app/lesson/[id]/LessonPageClient.tsx` — client logic extracted from the
+  old client-only page, now rendered as a child of the server component.
+- **Hide lesson** in history: `EyeOff` button on each item soft-hides it
+  (localStorage, no Firestore delete needed). Hidden items are filterable
+  via an `Eye` toggle. `lib/storage.ts` gained `loadHiddenLessons` and
+  `toggleHidden`.
+- History shows **inputText** (the teacher's original idea) under each title,
+  searchable alongside title, verse, and memory verse.
+- `DEPLOYMENT.md` + `SETUP_NOTES.md` updated with Gemini `AQ.Ab...` Auth
+  key warning and `/api/test-gemini` diagnostic instructions.
+- `public/sw.js` cache name bumped to `dahampasala-shell-v2` — existing PWA
+  installs now pick up the new code on next visit.
+
+## [2.0.0] - 2026-07-16
+### Added
+- **Auth key fix (🔴 Critical)**: Google AI Studio keys (`AQ.Ab...`) now use
+  `Authorization: Bearer` header instead of `?key=`. Auto-detected by prefix.
+  Updated model list: `gemini-2.5-flash` → `gemini-2.5-flash-lite-preview-06-17`
+  → `gemini-2.0-flash` → `gemini-2.0-flash-lite` → `gemini-1.5-flash` → `gemini-1.5-flash-8b`.
+- **Memory verse slide**: new `memory_verse` field, highlighted gradient card.
+- **Activities slide**: new `activity_ideas` field, 4th section toggle (📖❓✨🎨).
+- **Suggested topic chips** (8 quick-start Sinhala ideas).
+- **Recent topics** (localStorage, last 5 shown below textarea).
+- **Auto-save draft** (localStorage, cleared on successful generation).
+- **Clear input button** (× appears when textarea has content).
+- **Font size toggle** (Normal / Large / X-Large, persisted in localStorage).
+- **Confetti celebration burst** on lesson generation success.
+- **Toast notifications** (`components/Toast.tsx`).
+- **Copy-to-clipboard** on every presentation slide + bottom nav shortcut.
+- **Keyboard navigation** in presentation (← → Esc).
+- **Fullscreen API** toggle in presentation.
+- **Quiz timer** (`components/QuizTimer.tsx`) — 60/90/120s animated ring,
+  pulsing warning, haptic finish. Toggle-able from the quiz slide.
+- **History v2**: live search, lesson + favorite count, star-to-favorite
+  (localStorage), section badges, memory verse preview, favorites-only filter.
+- **OG meta tags** in `layout.tsx` for WhatsApp/social link previews.
+- **SVG PWA icon** (`public/icons/icon.svg`) — fixes 404 icon errors.
+- `lib/storage.ts` — SSR-safe localStorage utilities.
+
 ## [1.12.2] - 2026-07-04
 ### Added
 - `firebase.json` — Firebase CLI project config pointing at `firestore.rules`

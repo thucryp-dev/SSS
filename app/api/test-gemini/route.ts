@@ -1,5 +1,5 @@
 /**
- * app/api/test-gemini/route.ts  v2.2
+ * app/api/test-gemini/route.ts  v2.3
  * GET /api/test-gemini
  *
  * Diagnostic endpoint — visit in browser to verify the Gemini key works.
@@ -8,8 +8,12 @@
  * AQ.), matching Google's documented standard. Earlier versions incorrectly
  * used Authorization: Bearer for AQ. keys, which Google's endpoint rejects
  * with 401 "Expected OAuth 2.0 access token" — that's an error about the
- * WRONG HEADER, not an invalid key. See app/api/generate-lesson/route.ts
- * header comment for the full explanation and sources.
+ * WRONG HEADER, not an invalid key.
+ *
+ * 🔴 v2.3 fix: model list updated from Gemini 1.5.x/2.0.x/2.5.x (now
+ * returning 404 "no longer available to new users" or 429 quota-zeroed)
+ * to the current Gemini 3.x generation, confirmed GA via ai.google.dev.
+ * See app/api/generate-lesson/route.ts header comment for full details.
  */
 
 import { type NextRequest, NextResponse } from "next/server";
@@ -17,12 +21,10 @@ import { type NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 const MODELS = [
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite-preview-06-17",
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-8b",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
 ];
 
 export async function GET(_req: NextRequest) {

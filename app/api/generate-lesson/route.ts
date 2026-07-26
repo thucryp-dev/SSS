@@ -76,13 +76,19 @@ function buildFetchArgs(
 // Models — 2026 priority order
 // ---------------------------------------------------------------------------
 
+// 🔴 v2.3: Gemini 1.5.x/2.0.x/2.5.x models are being retired for NEW API
+// keys (confirmed via the user's own /api/test-gemini results: 404 "no
+// longer available to new users" on 2.5-flash, and 404 "not found" on
+// 1.5-flash/1.5-flash-8b; 429 quota-exhausted on 2.0-flash/2.0-flash-lite
+// — those two are mid-retirement, with quota already dialed toward zero
+// to force migration). Google's current generation is Gemini 3.x — all
+// four models below are confirmed GA (generally available, production
+// ready) per ai.google.dev docs updated within the last week of this fix.
 const GEMINI_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite-preview-06-17",
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-8b",
+  "gemini-3.6-flash",       // newest, GA — strongest agentic/multimodal performance
+  "gemini-3.5-flash",       // GA, stable — most intelligent Flash model at scale
+  "gemini-3.5-flash-lite",  // GA — fastest, lowest-cost in the 3.5 family
+  "gemini-3.1-flash-lite",  // older but still documented/available — final fallback
 ];
 
 // ---------------------------------------------------------------------------
@@ -182,7 +188,10 @@ async function generateLesson(
   const requestBody = {
     system_instruction: { parts: [{ text: prompt }] },
     contents: [{ role: "user", parts: [{ text: `Teacher's idea / topic / Bible passage:\n"""${input}"""` }] }],
-    generationConfig: { responseMimeType: "application/json", temperature: 0.85, maxOutputTokens: 2560 },
+    // temperature/top_p/top_k deliberately left at Gemini's defaults —
+    // Google's official Gemini 3.x docs explicitly recommend against
+    // overriding these, since the model's reasoning is tuned for them.
+    generationConfig: { responseMimeType: "application/json", maxOutputTokens: 2560 },
   };
 
   let lastStatus = 0;

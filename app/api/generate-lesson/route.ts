@@ -1,8 +1,15 @@
 /**
- * app/api/generate-lesson/route.ts  v2.0
+ * app/api/generate-lesson/route.ts  v2.2
  *
- * Key fix: Google Auth keys (AQ.Ab...) need Authorization: Bearer header.
- * Standard keys (AIza...) use ?key= query param. Auto-detected.
+ * 🔴 CRITICAL FIX (v2.2): Every Gemini API key format — both legacy
+ * "AIza..." keys and the newer "AQ.Ab..." keys — authenticates with the
+ * SAME header: `x-goog-api-key: <key>`. There is no format-based branching
+ * needed. Earlier versions of this file incorrectly sent AQ. keys via
+ * `Authorization: Bearer <key>`, which Google's endpoint rejects with a
+ * 401 "Expected OAuth 2.0 access token" error — that header is for real
+ * OAuth tokens, not API keys, regardless of the key's prefix. Confirmed
+ * against Google's official docs (ai.google.dev/gemini-api/docs/api-key)
+ * and a live example showing an AQ.Ab... key working via x-goog-api-key.
  *
  * New output fields:
  *   memory_verse   — short memorable phrasing of the verse (child/adult appropriate)
@@ -48,23 +55,19 @@ interface LessonResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Auth — auto-detect key type
+// Auth — x-goog-api-key header works for every key format (AIza and AQ.)
 // ---------------------------------------------------------------------------
 
 function buildFetchArgs(
   apiKey: string,
-  model: string,
-  body: object
+  model: string
 ): { url: string; headers: Record<string, string> } {
   const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-  const isAuthKey = apiKey.startsWith("AQ.");
   return {
-    url: isAuthKey
-      ? `${BASE}/${model}:generateContent`
-      : `${BASE}/${model}:generateContent?key=${apiKey}`,
+    url: `${BASE}/${model}:generateContent`,
     headers: {
       "Content-Type": "application/json",
-      ...(isAuthKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      "x-goog-api-key": apiKey,
     },
   };
 }
@@ -186,7 +189,7 @@ async function generateLesson(
   let lastBody = "";
 
   for (const model of GEMINI_MODELS) {
-    const { url, headers } = buildFetchArgs(apiKey, model, requestBody);
+    const { url, headers } = buildFetchArgs(apiKey, model);
     let res: Response;
     try {
       res = await fetch(url, {
@@ -205,8 +208,11 @@ async function generateLesson(
     lastBody = text;
 
     if (!res.ok) {
-      // 400 = bad request (bad key/format) or quota → stop immediately
-      if (res.status === 400 || res.status === 429 || res.status === 403) {
+      // 400/401/403/429 = the KEY itself is the problem (bad format, bad
+      // auth, no permission, or quota exhausted) — not model-specific, so
+      // retrying other models would just repeat the same failure 6 times
+      // and cost 30+ seconds for nothing. Stop immediately instead.
+      if (res.status === 400 || res.status === 401 || res.status === 403 || res.status === 429) {
         console.error(`[Gemini] ${model} hard error ${res.status}:`, text.slice(0, 300));
         break;
       }
@@ -306,8 +312,8 @@ export async function POST(req: NextRequest) {
     console.error("[generate-lesson] failed:", msg);
     const userMsg = msg.includes("MISSING_KEY")
       ? "Gemini API key සකසා නැත."
-      : msg.includes("403") || msg.includes("400")
-      ? "Gemini API key වලංගු නැත. AI Studio හි නව Auth key (AQ.Ab...) සාදා Vercel ට දොහළ key update කරන්න."
+      : msg.includes("403") || msg.includes("400") || msg.includes("401")
+      ? "Gemini API key වලංගු නැත. Vercel-ෙහි GEMINI_API_KEY value එක නිවැරදිද බලන්න, එවිට /api/test-gemini visit කරන්න."
       : "පාඩම සකස් කිරීමේදී දෝෂයක් ඇති විය. කරුණාකර නැවත උත්සාහ කරන්න.";
     return NextResponse.json({ error: userMsg }, { status: 502 });
   }

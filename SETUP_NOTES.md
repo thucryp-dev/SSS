@@ -93,17 +93,21 @@ split that way.
   `icon-512.png`, and `icon-512-maskable.png`. These need to be real PNG
   files — generate or design them and drop them in; nothing in this repo
   creates binary image assets.
-- **Gemini API key format (June 2026+)**: New keys from Google AI Studio
-  start with `AQ.Ab...` and require `Authorization: Bearer` — not the old
-  `?key=` query param. The route auto-detects the prefix and uses the right
-  method, so both old (`AIza...`) and new (`AQ.Ab...`) keys work. If lesson
-  generation returns 502, visit `/api/test-gemini` in the browser — it
-  tests all 6 models in the fallback chain and shows the exact error for
-  each one.
+- **Gemini API key format (2026)**: Google AI Studio issues keys in two
+  formats — legacy `AIza...` and the newer `AQ.Ab...`. Both are equally
+  valid; **both authenticate identically**, via the `x-goog-api-key`
+  header (Google's current documented standard — confirmed at
+  ai.google.dev/gemini-api/docs/api-key). There is no format-specific
+  branching needed in the code. If lesson generation returns 502, visit
+  `/api/test-gemini` in the browser — it tests all 6 models in the
+  fallback chain and shows the exact error for each one.
 - **Gemini model fallback chain**: `gemini-2.5-flash` → `gemini-2.5-flash-lite-preview-06-17`
   → `gemini-2.0-flash` → `gemini-2.0-flash-lite` → `gemini-1.5-flash` →
   `gemini-1.5-flash-8b`. The first model your key can access is used
-  automatically — no manual swapping needed.
+  automatically — no manual swapping needed. A 400/401/403/429 response
+  stops the fallback loop immediately (it means the key itself is bad, not
+  that model specifically), so a real auth failure surfaces in seconds
+  instead of after all 6 models are tried.
 - **Hugging Face cold starts**: the first SDXL request after idle time can
   take 20–30s while the model loads. The route already sets
   `wait_for_model: true` and a 45s timeout; consider a periodic warm-up

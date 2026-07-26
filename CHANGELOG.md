@@ -18,6 +18,28 @@ tooling — but they follow the same conceptual meaning as SemVer:
 _Add new entries here as you make changes — then move them under a new
 version heading below once you're ready to consider them "shipped."_
 
+## [2.2.0] - 2026-07-26
+### Fixed
+- **🔴 THE ACTUAL Gemini auth bug, finally correct.** Every previous
+  attempt at this fix was wrong: `route.ts` was sending `AQ.Ab...` keys via
+  `Authorization: Bearer <key>`, which Google's endpoint rejects with
+  `401 — Expected OAuth 2.0 access token`. That header is for real OAuth
+  tokens, not API keys — regardless of the key's prefix. The correct,
+  Google-documented method for **every** Gemini key format (`AIza...` and
+  `AQ.Ab...` alike) is the **`x-goog-api-key`** header. Confirmed against
+  Google's official docs (ai.google.dev/gemini-api/docs/api-key) and a
+  live community example showing an `AQ.Ab...` key working via that exact
+  header. `buildFetchArgs()` simplified — no more format branching, no
+  more `?key=` query param, one header for every key.
+- Added `401` to the "stop retrying other models" condition in the
+  fallback loop — a key/auth failure isn't model-specific, so the old code
+  wastefully retried all 6 models (30+ seconds) before giving up. Now it
+  fails fast on the first 400/401/403/429.
+- Removed the misleading error message that told teachers to "create a new
+  Auth key" when Gemini failed — the key format was never the problem.
+- `app/api/test-gemini/route.ts` updated with the same header fix, plus a
+  clearer hint in `first_working_model` when every model returns 401.
+
 ## [2.1.0] - 2026-07-20
 ### Added
 - `app/not-found.tsx` — custom Sinhala 404 page (was Next.js default English before)

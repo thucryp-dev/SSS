@@ -638,7 +638,7 @@ export default function Home() {
           </Link>
           <span className="text-amber-300" aria-hidden="true">•</span>
           <Link href="/changelog" className="text-sm font-medium text-amber-500 underline-offset-4 hover:text-amber-700 hover:underline">
-            අලුත් දේවල් (v2.1)
+            අලුත් දේවල් (v2.2)
           </Link>
         </div>
         <p className="text-xs text-amber-400">නිර්මාණය හා සංවර්ධනය — Prabhath Lokuge</p>

@@ -60,4 +60,41 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Visible keyboard focus everywhere — important for the elderly-user
+     accessibility floor, and for anyone using the presentation's
+     keyboard navigation (← → Esc) without a mouse. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+/* Respect the OS-level "reduce motion" preference — turns off the
+   confetti burst, pulsing mic ring, and slide transitions for anyone
+   who has this set, without needing a separate in-app setting. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Warm ambient glow — the app's one signature visual touch, evoking
+   lamplight/candlelight rather than a generic drop-shadow. Used sparingly
+   behind the header icon and key call-to-action moments. */
+.warm-glow {
+  position: relative;
+}
+.warm-glow::before {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  background: radial-gradient(circle, hsl(38 92% 60% / 0.35) 0%, transparent 70%);
+  z-index: -1;
+  pointer-events: none;
 }

@@ -18,6 +18,78 @@ tooling — but they follow the same conceptual meaning as SemVer:
 _Add new entries here as you make changes — then move them under a new
 version heading below once you're ready to consider them "shipped."_
 
+## [2.4.0] - 2026-07-27
+### Fixed
+- **🔴 Hugging Face image generation fixed.** The old endpoint
+  (`api-inference.huggingface.co`) has been superseded by Hugging Face's
+  "Inference Providers" architecture, routed through `router.huggingface.co`.
+  Same Bearer-token auth, different domain. Also: image failures previously
+  only logged a status code — now the full response body is logged, since
+  that's where Hugging Face puts the actual reason (provider not enabled,
+  billing required, quota, etc).
+- **🔴 Sinhala content-quality bugs fixed.** Added a hard server-side
+  validation check (`containsForeignScript()`) that scans every
+  Sinhala-facing field for Devanagari (Hindi) or Tamil Unicode characters
+  and rejects the response (triggering a retry with the next model) if
+  found — reported foreign-script leakage should no longer reach the
+  screen. System prompt substantially strengthened with explicit script-
+  purity rules, natural/idiomatic Sinhala guidance (write like an actual
+  teacher speaks, not a stiff translation), and scriptural-accuracy
+  requirements (real verse references, accurate narrative details) —
+  balanced against the existing non-verbatim copyright constraint.
+- Removed the non-existent PNG icon references from `manifest.json` (real
+  404 console errors) — the SVG icon alone (`sizes: "any"`) is a fully
+  valid PWA icon in modern browsers.
+
+### Added
+- `app/api/test-huggingface/route.ts` — diagnostic endpoint mirroring
+  `/api/test-gemini`'s approach: visit in browser to see the exact
+  Hugging Face error (with a specific hint per status code) instead of a
+  silently-swallowed `null`.
+- Accessibility: `aria-label` added to every icon-only button across
+  `LessonPresentation.tsx` (close, fullscreen, share, read-aloud, copy) and
+  `aria-pressed` added to all toggle-style buttons (age group, sections,
+  voice language, history filters) for correct screen-reader state
+  announcement.
+- `prefers-reduced-motion` now respected both at the CSS level (global
+  media query in `globals.css`, disables/shortens all CSS transitions) and
+  the JS level (`useReducedMotion()` from framer-motion disables the
+  continuous pulsing mic-recording ring specifically).
+- Visible keyboard focus ring (`:focus-visible`) added globally — matters
+  for the presentation's keyboard navigation (← → Esc) and for any
+  non-mouse user.
+- `.warm-glow` CSS utility — a soft radial-gradient ambient glow (evoking
+  lamplight/candlelight) used behind the header icon and the memory-verse
+  card, the app's one deliberate signature visual touch.
+- Visual polish pass across the dashboard and presentation: richer
+  gradient buttons with hover/active depth, consistent numbered-badge
+  styling between activities and quiz questions, an image-status preview
+  directly in the dashboard result card (shows the generated image or an
+  honest "image unavailable" note immediately, without opening the full
+  presentation), refined card shadows and borders throughout.
+
+## [2.3.0] - 2026-07-26
+### Fixed
+- **🔴 Gemini model list updated to the current generation.** After the
+  v2.2.0 auth header fix, `/api/test-gemini` revealed the REAL remaining
+  problem: every model in the old fallback chain
+  (`gemini-2.5-flash`, `gemini-2.5-flash-lite-preview-06-17`,
+  `gemini-2.0-flash`, `gemini-2.0-flash-lite`, `gemini-1.5-flash`,
+  `gemini-1.5-flash-8b`) either returned `404 — This model ... is no
+  longer available to new users` or `429 — You exceeded your current
+  quota` (quota deliberately zeroed on retiring models to force
+  migration). Google's Gemini 1.5.x/2.0.x/2.5.x generation has been
+  retired for newly-created API keys. Replaced with the confirmed-GA
+  (generally available, production-ready) Gemini 3.x generation:
+  `gemini-3.6-flash` → `gemini-3.5-flash` → `gemini-3.5-flash-lite` →
+  `gemini-3.1-flash-lite`.
+- Removed the `temperature: 0.85` override from `generationConfig` —
+  Google's Gemini 3.x docs explicitly recommend leaving
+  `temperature`/`top_p`/`top_k` at their defaults, since the model's
+  reasoning behavior is tuned for those specific values.
+- `SETUP_NOTES.md` and `KEYS_GUIDE.md` updated to reference the correct
+  4-model fallback chain (previously described a stale 6-model list).
+
 ## [2.2.0] - 2026-07-26
 ### Fixed
 - **🔴 THE ACTUAL Gemini auth bug, finally correct.** Every previous

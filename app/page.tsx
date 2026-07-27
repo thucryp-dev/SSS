@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import {
   ALargeSmall,
@@ -151,6 +151,12 @@ function ConfettiBurst({ trigger }: { trigger: boolean }) {
 // ---------------------------------------------------------------------------
 
 export default function Home() {
+  // Respects the OS "reduce motion" setting — used to skip the continuous
+  // pulsing mic-recording ring for anyone with that preference (the global
+  // CSS media query in globals.css handles pure-CSS transitions, but
+  // framer-motion's JS-driven animations need this hook separately).
+  const prefersReducedMotion = useReducedMotion();
+
   // --- State ---
   const [inputText, setInputText]         = useState("");
   const [isRecording, setIsRecording]     = useState(false);
@@ -389,18 +395,19 @@ export default function Home() {
 
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Header */}
-        <header className="space-y-2 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-600 text-white shadow-lg shadow-amber-300/50">
+        <header className="space-y-2.5 text-center">
+          <div className="warm-glow mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-lg shadow-amber-400/40">
             <BookHeart className="h-9 w-9" />
           </div>
           <div className="flex items-center justify-center gap-3">
-            <h1 className="text-3xl font-bold text-amber-900 sm:text-4xl">දහම් පාසල් සහායක</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-amber-900 sm:text-4xl">දහම් පාසල් සහායක</h1>
             {/* Font size toggle */}
             <button
               type="button"
               onClick={cycleFont}
               title="අකුරු ප්‍රමාණය"
-              className="flex items-center gap-1 rounded-xl border-2 border-amber-300 bg-white px-2.5 py-1 text-sm font-bold text-amber-700 hover:bg-amber-50"
+              aria-label="අකුරු ප්‍රමාණය වෙනස් කරන්න"
+              className="flex items-center gap-1 rounded-xl border-2 border-amber-300 bg-white px-2.5 py-1 text-sm font-bold text-amber-700 shadow-sm transition hover:border-amber-400 hover:bg-amber-50 active:scale-95"
             >
               <ALargeSmall className="h-4 w-4" />
               {FONT_LABELS[fontSize]}
@@ -411,21 +418,21 @@ export default function Home() {
 
         {/* Offline / syncing banners */}
         {!isOnline && (
-          <Alert className="border-2 border-amber-400 bg-amber-100 text-amber-900">
+          <Alert className="border-2 border-amber-400 bg-amber-100 text-amber-900 shadow-sm">
             <WifiOff className="h-6 w-6" />
             <AlertTitle className="text-lg font-bold">අන්තර්ජාලය නොමැත</AlertTitle>
             <AlertDescription>ඔබගේ උපාංගය දැනට අන්තර්ජාලයට සම්බන්ධ නැත.</AlertDescription>
           </Alert>
         )}
         {offlineNotice && (
-          <Alert className="border-2 border-amber-400 bg-amber-100 text-amber-900">
+          <Alert className="border-2 border-amber-400 bg-amber-100 text-amber-900 shadow-sm">
             <WifiOff className="h-6 w-6" />
             <AlertTitle className="text-lg font-bold">ඉල්ලීම සුරැකිණි</AlertTitle>
             <AlertDescription>දැනට අන්තර්ජාලය නොමැත. ඔබගේ ඉල්ලීම සුරක්ෂිතයි, අන්තර්ජාලය ලැබුණු විගස පාඩම සකස් වේවි.</AlertDescription>
           </Alert>
         )}
         {syncingNotice && (
-          <Alert className="border-2 border-emerald-400 bg-emerald-50 text-emerald-900">
+          <Alert className="border-2 border-emerald-400 bg-emerald-50 text-emerald-900 shadow-sm">
             <Sparkles className="h-6 w-6" />
             <AlertTitle className="text-lg font-bold">පාඩම සකස් වෙමින්...</AlertTitle>
             <AlertDescription>සුරැකි ඉල්ලීම දැන් සකස් කරමින් පවතී.</AlertDescription>
@@ -441,7 +448,7 @@ export default function Home() {
                 key={topic}
                 type="button"
                 onClick={() => { setInputText(topic); setError(null); }}
-                className="rounded-full border-2 border-amber-200 bg-white px-3 py-1.5 text-sm font-medium text-amber-800 transition hover:border-amber-500 hover:bg-amber-50 active:scale-95"
+                className="rounded-full border-2 border-amber-200 bg-white px-3 py-1.5 text-sm font-medium text-amber-800 shadow-sm transition hover:border-amber-400 hover:bg-amber-50 hover:shadow-md active:scale-95"
               >
                 {topic}
               </button>
@@ -450,7 +457,7 @@ export default function Home() {
         </div>
 
         {/* Main input card */}
-        <Card className="border-2 border-amber-200 bg-white/80 shadow-xl backdrop-blur">
+        <Card className="border-2 border-amber-200 bg-white/90 shadow-xl shadow-amber-900/5 backdrop-blur">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl text-amber-900">පාඩම සඳහා අදහස කියන්න</CardTitle>
             <CardDescription className="text-base text-amber-700">
@@ -467,8 +474,11 @@ export default function Home() {
                    { value: "11-12", label: "අවු. 11-12" }, { value: "adult", label: "වැඩිහිටි" },
                 ] as { value: AgeGroup; label: string }[]).map(({ value, label }) => (
                   <button key={value} type="button" onClick={() => setAgeGroup(value)}
-                    className={`rounded-xl border-2 py-2.5 text-base font-bold transition ${
-                      ageGroup === value ? "border-amber-600 bg-amber-600 text-white shadow-md" : "border-amber-200 bg-white text-amber-700 hover:border-amber-400"
+                    aria-pressed={ageGroup === value}
+                    className={`rounded-xl border-2 py-2.5 text-base font-bold transition active:scale-95 ${
+                      ageGroup === value
+                        ? "border-amber-600 bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-md shadow-amber-600/30"
+                        : "border-amber-200 bg-white text-amber-700 shadow-sm hover:border-amber-400 hover:shadow-md"
                     }`}>
                     {label}
                   </button>
@@ -488,8 +498,11 @@ export default function Home() {
                 ]).map(({ key, label }) => (
                   <button key={key} type="button"
                     onClick={() => setSections((p) => ({ ...p, [key]: !p[key] }))}
-                    className={`rounded-xl border-2 py-2.5 text-sm font-bold transition ${
-                      sections[key] ? "border-amber-600 bg-amber-600 text-white shadow-md" : "border-amber-200 bg-white text-amber-500 hover:border-amber-400"
+                    aria-pressed={sections[key]}
+                    className={`rounded-xl border-2 py-2.5 text-sm font-bold transition active:scale-95 ${
+                      sections[key]
+                        ? "border-amber-600 bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-md shadow-amber-600/30"
+                        : "border-amber-200 bg-white text-amber-500 shadow-sm hover:border-amber-400 hover:shadow-md"
                     }`}>
                     {sections[key] ? "✓ " : ""}{label}
                   </button>
@@ -498,10 +511,11 @@ export default function Home() {
             </div>
 
             {/* Voice language toggle */}
-            <div className="flex gap-2 rounded-full bg-amber-100 p-1">
+            <div className="flex gap-2 rounded-full bg-amber-100 p-1 shadow-inner">
               {(["si-LK", "en-US"] as const).map((lang) => (
                 <button key={lang} type="button" onClick={() => setVoiceLang(lang)}
-                  className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+                  aria-pressed={voiceLang === lang}
+                  className={`rounded-full px-4 py-1.5 text-sm font-semibold transition active:scale-95 ${
                     voiceLang === lang ? "bg-amber-600 text-white shadow" : "text-amber-700"
                   }`}>
                   {lang === "si-LK" ? "සිංහල" : "ඉංග්‍රීසි"}
@@ -513,12 +527,15 @@ export default function Home() {
             <button type="button"
               onClick={isRecording ? stopRecording : startRecording}
               aria-label={isRecording ? "පටිගත කිරීම නවත්වන්න" : "කථා කිරීම ආරම්භ කරන්න"}
-              className="relative flex h-32 w-32 items-center justify-center rounded-full bg-amber-600 text-white shadow-2xl shadow-amber-400/60 transition active:scale-95 sm:h-36 sm:w-36">
-              {isRecording && (
+              className="relative flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-2xl shadow-amber-500/40 transition active:scale-95 sm:h-36 sm:w-36">
+              {isRecording && !prefersReducedMotion && (
                 <motion.span className="absolute inset-0 rounded-full bg-amber-400"
                   animate={{ scale: [1, 1.4, 1], opacity: [0.6, 0, 0.6] }}
                   transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
                   aria-hidden="true" />
+              )}
+              {isRecording && prefersReducedMotion && (
+                <span className="absolute inset-0 rounded-full bg-amber-400/30" aria-hidden="true" />
               )}
               {isRecording ? <Square className="h-12 w-12" /> : <Mic className="h-14 w-14" />}
             </button>
@@ -546,7 +563,7 @@ export default function Home() {
                 {inputText && (
                   <button type="button" onClick={() => { setInputText(""); clearDraft(); }}
                     aria-label="ඉවත් කරන්න"
-                    className="absolute right-3 top-3 rounded-full bg-amber-100 p-1 text-amber-600 hover:bg-amber-200">
+                    className="absolute right-3 top-3 rounded-full bg-amber-100 p-1 text-amber-600 transition hover:bg-amber-200 active:scale-90">
                     <X className="h-4 w-4" />
                   </button>
                 )}
@@ -564,7 +581,7 @@ export default function Home() {
                   {recentTopics.map((t) => (
                     <button key={t} type="button"
                       onClick={() => { setInputText(t); setError(null); }}
-                      className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-700 hover:bg-amber-100">
+                      className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-700 transition hover:bg-amber-100 active:scale-95">
                       {t.length > 40 ? t.slice(0, 40) + "…" : t}
                     </button>
                   ))}
@@ -579,7 +596,7 @@ export default function Home() {
             )}
 
             <Button onClick={handleGenerate} disabled={isLoading || !inputText.trim()}
-              className="h-14 w-full rounded-2xl bg-amber-700 text-xl font-bold text-white shadow-lg shadow-amber-300/60 hover:bg-amber-800 disabled:opacity-50">
+              className="h-14 w-full rounded-2xl bg-gradient-to-r from-amber-600 to-amber-800 text-xl font-bold text-white shadow-lg shadow-amber-600/30 transition hover:shadow-xl hover:shadow-amber-600/40 active:scale-[0.98] disabled:opacity-50 disabled:shadow-none">
               {isLoading ? (
                 <><Loader2 className="mr-2 h-6 w-6 animate-spin" /> පාඩම සැකසෙමින්...</>
               ) : (
@@ -599,7 +616,19 @@ export default function Home() {
         <AnimatePresence>
           {lesson && !isLoading && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-              <Card className="border-2 border-emerald-300 bg-emerald-50/80 shadow-xl">
+              <Card className="overflow-hidden border-2 border-emerald-300 bg-emerald-50/80 shadow-xl">
+                {sections.image && (
+                  <div className="border-b border-emerald-200">
+                    {lesson.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={lesson.image_url} alt={lesson.title} className="h-40 w-full object-cover" />
+                    ) : (
+                      <div className="flex h-20 items-center justify-center bg-emerald-100/60 text-sm text-emerald-600">
+                        🎨 රූපය ලබාගත නොහැකි විය — කතාව/ප්‍රශ්න/පදය සාමාන්‍ය පරිදි පවතී
+                      </div>
+                    )}
+                  </div>
+                )}
                 <CardHeader>
                   <CardTitle className="text-2xl text-emerald-900">{lesson.title}</CardTitle>
                   <CardDescription className="text-base text-emerald-800">{lesson.bible_verse}</CardDescription>
@@ -609,11 +638,11 @@ export default function Home() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <Button onClick={() => { vibrate(50); setShowPresentation(true); }}
-                    className="h-14 w-full rounded-2xl bg-emerald-700 text-xl font-bold text-white hover:bg-emerald-800">
+                    className="h-14 w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-800 text-xl font-bold text-white shadow-md shadow-emerald-700/30 transition hover:shadow-lg active:scale-[0.98]">
                     ඉදිරිපත් කිරීම අරඹන්න
                   </Button>
                   <Button onClick={handleGenerate} variant="outline"
-                    className="h-12 w-full rounded-2xl border-2 border-emerald-300 text-base font-semibold text-emerald-800 hover:bg-emerald-50">
+                    className="h-12 w-full rounded-2xl border-2 border-emerald-300 bg-white text-base font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-50 active:scale-[0.98]">
                     නැවත සකස් කරන්න
                   </Button>
                 </CardContent>
@@ -638,7 +667,7 @@ export default function Home() {
           </Link>
           <span className="text-amber-300" aria-hidden="true">•</span>
           <Link href="/changelog" className="text-sm font-medium text-amber-500 underline-offset-4 hover:text-amber-700 hover:underline">
-            අලුත් දේවල් (v2.2)
+            අලුත් දේවල් (v2.4)
           </Link>
         </div>
         <p className="text-xs text-amber-400">නිර්මාණය හා සංවර්ධනය — Prabhath Lokuge</p>

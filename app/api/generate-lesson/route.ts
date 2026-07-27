@@ -146,13 +146,42 @@ ${AGE_GUIDANCE[ageGroup]}
 STRICT RULES:
 - Reply with ONLY a valid JSON object. No markdown, no code fences, no extra text before or after.
 - Include ONLY the fields listed below.
-- All Sinhala fields: grammatically correct pure Sinhala. No English, no Singlish mixed in.
-- Protestant 66-book canon only (39 OT + 27 NT). Never reference Apocrypha.
-- "bible_verse": your own Sinhala rendering in the spirit of the ROV (Sri Lanka Bible Society 1995) — do NOT claim to reproduce that copyrighted text verbatim. Format: verse text — book name chapter:verse in Sinhala.
-- "memory_verse": derived from the same verse, condensed or restated — age-appropriate, easily memorised.
+
+SINHALA SCRIPT PURITY (critical — violations are treated as failures):
+- Every field except "image_prompt" MUST use ONLY Sinhala script (Unicode block 0D80–0DFF), standard punctuation, and Arabic numerals.
+- NEVER output Devanagari/Hindi script, Tamil script, or any script other than Sinhala, anywhere in a Sinhala-facing field — not even a single stray character, not even inside a longer Sinhala sentence.
+- NEVER output English or Singlish (Sinhala words spelled in Latin letters) inside a Sinhala-facing field. The only exception is internationally-recognized brand names that have no Sinhala equivalent (e.g. WhatsApp, PDF) — and even those should be avoided unless truly necessary.
+- Do not mix scripts within a single word or sentence under any circumstance.
+
+NATURAL, IDIOMATIC SINHALA:
+- Write the way a warm, experienced Sunday school teacher actually speaks to their class — natural spoken-register Sinhala, not a stiff word-for-word translation from English.
+- Avoid academic, bureaucratic, or overly formal vocabulary where a simpler everyday word exists (unless writing for the "adult" audience, where a more formal register is appropriate).
+- Use natural Sinhala sentence structure and idiom, not English sentence structure with Sinhala words substituted in.
+- Proofread your own output mentally before responding: does every sentence read the way a Sinhala speaker would actually say it?
+
+SCRIPTURAL ACCURACY:
+- The Bible verse reference (book, chapter, verse) must be REAL and must genuinely match the theme of the lesson — never invent or misattribute a reference.
+- All narrative details (names, order of events, who did what) must be scripturally accurate to the actual Biblical account — do not invent details, characters, or events not present in Scripture.
+- Protestant 66-book canon only (39 OT + 27 NT). Never reference Apocrypha/deuterocanonical books.
+- "bible_verse": your own natural Sinhala rendering in the spirit of the ROV (Sri Lanka Bible Society 1995) — do NOT claim to reproduce that copyrighted text verbatim, but the MEANING and factual content must be fully accurate to the real verse. Format: verse text — book name chapter:verse in Sinhala.
+- "memory_verse": derived from the same verse, condensed or restated — age-appropriate, easily memorised, and equally accurate to the source meaning.
 
 REQUIRED FIELDS:
 ${all.map((f) => `- ${f}`).join("\n")}`;
+}
+
+// ---------------------------------------------------------------------------
+// Script-purity validation — a second line of defense beyond prompting.
+// Prompts reduce foreign-script leakage but can't guarantee zero — this
+// catches any Devanagari (Hindi) or Tamil characters that slip through,
+// so a defective response triggers a retry with the next model instead
+// of reaching the teacher's screen.
+// ---------------------------------------------------------------------------
+
+const FOREIGN_SCRIPT_PATTERN = /[\u0900-\u097F\u0B80-\u0BFF]/;
+
+function containsForeignScript(text: string): boolean {
+  return FOREIGN_SCRIPT_PATTERN.test(text);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,6 +198,26 @@ function isValid(data: unknown, sections: LessonSections): data is RawGeminiLess
   if (sections.quiz && (!Array.isArray(d.quiz_questions) || d.quiz_questions.length === 0)) return false;
   if (sections.activities && (!Array.isArray(d.activity_ideas) || d.activity_ideas.length === 0)) return false;
   if (sections.image && (typeof d.image_prompt !== "string" || !d.image_prompt.trim())) return false;
+
+  // Script-purity check: gather every Sinhala-facing string (everything
+  // except image_prompt, which is deliberately English) and reject the
+  // whole response if any contains Devanagari or Tamil characters. This
+  // is what actually catches foreign-script leakage — the prompt reduces
+  // it, but only this check guarantees it never reaches a teacher's screen.
+  const sinhalaFacingStrings: string[] = [d.title, d.bible_verse, d.memory_verse].filter(
+    (v): v is string => typeof v === "string"
+  );
+  if (Array.isArray(d.story_slides)) {
+    sinhalaFacingStrings.push(...d.story_slides.filter((s): s is string => typeof s === "string"));
+  }
+  if (Array.isArray(d.quiz_questions)) {
+    sinhalaFacingStrings.push(...d.quiz_questions.filter((s): s is string => typeof s === "string"));
+  }
+  if (Array.isArray(d.activity_ideas)) {
+    sinhalaFacingStrings.push(...d.activity_ideas.filter((s): s is string => typeof s === "string"));
+  }
+  if (sinhalaFacingStrings.some(containsForeignScript)) return false;
+
   return true;
 }
 
@@ -251,27 +300,53 @@ async function generateLesson(
 
 // ---------------------------------------------------------------------------
 // Hugging Face image
+//
+// 🔴 v2.4 fix: api-inference.huggingface.co (the old endpoint) has been
+// superseded by Hugging Face's "Inference Providers" architecture, routed
+// through router.huggingface.co. Same Bearer-token auth, different domain.
+// Also: image failures previously only logged a status code — now the
+// full response body is logged, since that's where HF puts the actual
+// reason (e.g. "provider not enabled", "billing required", quota, etc).
+// See /api/test-huggingface for a standalone diagnostic of this exact path.
 // ---------------------------------------------------------------------------
+
+const HF_ROUTER_URL =
+  "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0";
 
 async function generateImage(prompt: string): Promise<string | null> {
   const apiKey = process.env.HUGGINGFACE_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    console.warn("[HuggingFace] HUGGINGFACE_API_KEY not set — skipping image generation.");
+    return null;
+  }
   try {
-    const res = await fetch(
-      "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ inputs: prompt, options: { wait_for_model: true } }),
-        signal: AbortSignal.timeout(45000),
-      }
-    );
-    if (!res.ok) { console.error("[HuggingFace] failed:", res.status); return null; }
+    const res = await fetch(HF_ROUTER_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ inputs: prompt, options: { wait_for_model: true } }),
+      signal: AbortSignal.timeout(45000),
+    });
+
+    if (!res.ok) {
+      // Read as text first — HF's error responses are JSON, but reading as
+      // text is safe even if something unexpected comes back, and this is
+      // exactly what shows up in Vercel's function logs for diagnosis.
+      const errorBody = await res.text();
+      console.error(`[HuggingFace] image generation failed — status ${res.status}:`, errorBody.slice(0, 500));
+      return null;
+    }
+
     const buf = await res.arrayBuffer();
     const mime = res.headers.get("content-type") ?? "image/jpeg";
+    if (buf.byteLength < 100) {
+      // A real image is never this small — this is almost always an error
+      // JSON body that slipped through with a 200-ish status, or an empty response.
+      console.error("[HuggingFace] response too small to be a real image:", buf.byteLength, "bytes");
+      return null;
+    }
     return `data:${mime};base64,${Buffer.from(buf).toString("base64")}`;
   } catch (err) {
-    console.error("[HuggingFace] error:", err);
+    console.error("[HuggingFace] request error:", err instanceof Error ? err.message : err);
     return null;
   }
 }

@@ -219,18 +219,19 @@ export default function LessonPresentation({ lesson, onClose }: LessonPresentati
 
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3">
-        <Button variant="ghost" size="icon" onClick={onClose}
-          className="h-12 w-12 rounded-full bg-white/70 text-amber-900 shadow hover:bg-white">
+        <Button variant="ghost" size="icon" onClick={onClose} aria-label="ඉදිරිපත් කිරීම වසන්න"
+          className="h-12 w-12 rounded-full bg-white/80 text-amber-900 shadow-md shadow-amber-900/10 backdrop-blur-sm transition hover:bg-white hover:shadow-lg active:scale-95">
           <X className="h-6 w-6" />
         </Button>
 
         {/* Progress dots with emoji icons */}
-        <div className="flex items-center gap-1.5" aria-label="ස්ලයිඩ් ගමන">
+        <div className="flex items-center gap-1.5 rounded-full bg-white/50 px-2 py-1.5 shadow-sm backdrop-blur-sm" aria-label="ස්ලයිඩ් ගමන" role="tablist">
           {slides.map((s, i) => (
-            <button key={i} type="button"
+            <button key={i} type="button" role="tab" aria-selected={i === current}
+              aria-label={`ස්ලයිඩ් ${i + 1}`}
               onClick={() => { setDirection(i > current ? 1 : -1); setCurrent(i); }}
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-xs transition ${
-                i === current ? "bg-amber-700 text-white shadow" : "bg-amber-200 text-amber-600 hover:bg-amber-300"
+              className={`flex h-7 w-7 items-center justify-center rounded-full text-xs transition-all duration-200 ${
+                i === current ? "scale-110 bg-amber-700 text-white shadow-md" : "bg-amber-100 text-amber-500 hover:bg-amber-200"
               }`}>
               {SLIDE_ICONS[s.type] ?? "•"}
             </button>
@@ -240,12 +241,13 @@ export default function LessonPresentation({ lesson, onClose }: LessonPresentati
         <div className="flex gap-2">
           {/* Fullscreen toggle */}
           <Button variant="ghost" size="icon" onClick={toggleFullscreen}
-            className="h-10 w-10 rounded-full bg-white/70 text-amber-900 shadow hover:bg-white">
+            aria-label={isFullscreen ? "සම්පූර්ණ තිරයෙන් ඉවත් වන්න" : "සම්පූර්ණ තිරයට යන්න"}
+            className="h-10 w-10 rounded-full bg-white/80 text-amber-900 shadow-md shadow-amber-900/10 backdrop-blur-sm transition hover:bg-white hover:shadow-lg active:scale-95">
             {isFullscreen ? <Shrink className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
           </Button>
           {/* Share */}
-          <Button variant="ghost" size="icon" onClick={handleShare}
-            className="h-10 w-10 rounded-full bg-white/70 text-amber-900 shadow hover:bg-white">
+          <Button variant="ghost" size="icon" onClick={handleShare} aria-label="පාඩම බෙදාගන්න"
+            className="h-10 w-10 rounded-full bg-white/80 text-amber-900 shadow-md shadow-amber-900/10 backdrop-blur-sm transition hover:bg-white hover:shadow-lg active:scale-95">
             <Share2 className="h-4 w-4" />
           </Button>
         </div>
@@ -294,36 +296,38 @@ export default function LessonPresentation({ lesson, onClose }: LessonPresentati
       {/* Bottom navigation */}
       <div className="flex items-center gap-2 px-4 pb-6">
         <Button onClick={() => paginate(-1)} disabled={current === 0}
-          className="h-14 flex-1 rounded-2xl bg-amber-200 text-lg font-bold text-amber-900 hover:bg-amber-300 disabled:opacity-40">
+          className="h-14 flex-1 rounded-2xl bg-white/70 text-lg font-bold text-amber-900 shadow-sm backdrop-blur-sm transition hover:bg-white disabled:opacity-30">
           <ChevronLeft className="mr-1 h-6 w-6" /> පෙරයට
         </Button>
 
         {/* Read Aloud */}
         <Button onClick={() => speak(getSlideText())} variant="outline"
-          className="h-14 w-14 shrink-0 rounded-2xl border-2 border-amber-400 text-amber-800 hover:bg-amber-50">
+          aria-label={isSpeaking ? "කියවීම නවත්වන්න" : "හඬින් කියවන්න"}
+          className="h-14 w-14 shrink-0 rounded-2xl border-2 border-amber-400 bg-white text-amber-800 shadow-sm transition hover:bg-amber-50 active:scale-95">
           {isSpeaking ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
         </Button>
 
         {/* Copy current slide */}
         <Button onClick={() => copyText(getSlideText())} variant="outline"
-          className="h-14 w-14 shrink-0 rounded-2xl border-2 border-amber-400 text-amber-800 hover:bg-amber-50">
+          aria-label="පිටපත් කරන්න"
+          className="h-14 w-14 shrink-0 rounded-2xl border-2 border-amber-400 bg-white text-amber-800 shadow-sm transition hover:bg-amber-50 active:scale-95">
           <Clipboard className="h-5 w-5" />
         </Button>
 
         {current === slides.length - 1 ? (
           <div className="flex flex-1 gap-2">
             <Button onClick={() => window.print()}
-              className="h-14 flex-1 rounded-2xl bg-amber-700 text-base font-bold text-white hover:bg-amber-800">
+              className="h-14 flex-1 rounded-2xl bg-amber-700 text-base font-bold text-white shadow-md shadow-amber-700/30 transition hover:bg-amber-800 hover:shadow-lg active:scale-95">
               <Printer className="mr-1 h-5 w-5" /> මුද්‍රණය
             </Button>
             <Button onClick={handleDownloadPdf}
-              className="h-14 flex-1 rounded-2xl bg-amber-900 text-base font-bold text-white hover:bg-black">
+              className="h-14 flex-1 rounded-2xl bg-amber-900 text-base font-bold text-white shadow-md shadow-amber-900/30 transition hover:bg-black hover:shadow-lg active:scale-95">
               <Download className="mr-1 h-5 w-5" /> PDF
             </Button>
           </div>
         ) : (
           <Button onClick={() => paginate(1)}
-            className="h-14 flex-1 rounded-2xl bg-amber-700 text-lg font-bold text-white hover:bg-amber-800">
+            className="h-14 flex-1 rounded-2xl bg-amber-700 text-lg font-bold text-white shadow-md shadow-amber-700/30 transition hover:bg-amber-800 hover:shadow-lg active:scale-95">
             ඉදිරියට <ChevronRight className="ml-1 h-6 w-6" />
           </Button>
         )}
@@ -355,7 +359,7 @@ export default function LessonPresentation({ lesson, onClose }: LessonPresentati
 function CopyBtn({ onClick }: { onClick: () => void }) {
   return (
     <button type="button" onClick={onClick}
-      className="mt-auto flex items-center gap-1.5 self-end rounded-lg border border-amber-200 px-2.5 py-1 text-xs font-medium text-amber-500 hover:bg-amber-50">
+      className="mt-auto flex items-center gap-1.5 self-end rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs font-medium text-amber-600 shadow-sm transition hover:border-amber-300 hover:bg-amber-50 active:scale-95">
       <Clipboard className="h-3.5 w-3.5" /> පිටපත් කරන්න
     </button>
   );
@@ -368,15 +372,20 @@ function CoverSlide({ lesson, ageLabel, onCopy }: {
     <div className="flex h-full flex-col items-center gap-4 text-center">
       {lesson.image_url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={lesson.image_url} alt={lesson.title} className="h-52 w-full rounded-2xl object-cover shadow-lg" />
+        <img src={lesson.image_url} alt={lesson.title}
+          className="h-52 w-full rounded-2xl object-cover shadow-lg ring-1 ring-amber-900/10" />
       ) : (
-        <div className="flex h-52 w-full items-center justify-center rounded-2xl bg-amber-100">
+        <div className="flex h-52 w-full items-center justify-center rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 ring-1 ring-amber-900/10">
           <BookOpen className="h-16 w-16 text-amber-400" />
         </div>
       )}
       <h2 className="text-2xl font-bold text-amber-900 sm:text-3xl">{lesson.title}</h2>
-      {ageLabel && <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-700">{ageLabel}</span>}
-      <blockquote className="rounded-xl bg-amber-50 px-4 py-3 text-base font-medium italic text-amber-800">
+      {ageLabel && (
+        <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold tracking-wide text-amber-700 shadow-sm">
+          {ageLabel}
+        </span>
+      )}
+      <blockquote className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-base font-medium italic leading-relaxed text-amber-800 shadow-sm">
         {lesson.bible_verse}
       </blockquote>
       <p className="text-xs text-amber-400">මෙම පදයේ නිවැරදි වචන සඳහා ශුද්ධ බයිබලය පරීක්ෂා කරන්න.</p>
@@ -393,8 +402,8 @@ function MemorySlide({ verse, onCopy }: { verse: string; onCopy: (t: string) => 
         <h3 className="text-xl font-bold">කටපාඩම් පදය</h3>
         <Star className="h-6 w-6 fill-amber-400 stroke-amber-500" />
       </div>
-      <div className="w-full rounded-3xl bg-gradient-to-br from-amber-500 to-orange-600 p-1 shadow-xl">
-        <div className="rounded-3xl bg-white px-6 py-8">
+      <div className="warm-glow w-full rounded-3xl bg-gradient-to-br from-amber-500 via-orange-500 to-orange-600 p-1 shadow-xl">
+        <div className="rounded-[1.3rem] bg-white px-6 py-8">
           <p className="text-2xl font-bold leading-relaxed text-amber-900 sm:text-3xl">{verse}</p>
         </div>
       </div>
@@ -411,9 +420,11 @@ function StorySlide({ text, index, total, imageUrl, onCopy }: {
     <div className="flex h-full flex-col gap-4">
       {imageUrl && index === 0 && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={imageUrl} alt="" className="h-36 w-full rounded-2xl object-cover shadow" />
+        <img src={imageUrl} alt="" className="h-36 w-full rounded-2xl object-cover shadow-md ring-1 ring-amber-900/10" />
       )}
-      <span className="text-xs font-bold text-amber-400">කොටස {index + 1} / {total}</span>
+      <span className="w-fit rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-600">
+        කොටස {index + 1} / {total}
+      </span>
       <p className="flex-1 text-xl leading-relaxed text-stone-800 sm:text-2xl">{text}</p>
       <CopyBtn onClick={() => onCopy(text)} />
     </div>
@@ -424,15 +435,15 @@ function ActivitiesSlide({ ideas, onCopy }: { ideas: string[]; onCopy: (t: strin
   const allText = ideas.map((a, i) => `${i + 1}. ${a}`).join("\n");
   return (
     <div className="flex h-full flex-col gap-4">
-      <div className="flex items-center gap-2 text-amber-700">
+      <div className="flex items-center gap-2 text-emerald-700">
         <Lightbulb className="h-6 w-6" />
         <h3 className="text-xl font-bold sm:text-2xl">ක්‍රියාකාරකම්</h3>
       </div>
       <ol className="flex-1 space-y-3">
         {ideas.map((idea, i) => (
-          <li key={i} className="flex gap-3 rounded-2xl bg-emerald-50 px-4 py-3 text-base font-medium text-stone-800 sm:text-lg">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white">{i + 1}</span>
-            {idea}
+          <li key={i} className="flex gap-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3.5 text-base font-medium leading-relaxed text-stone-800 shadow-sm sm:text-lg">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white shadow-sm">{i + 1}</span>
+            <span className="pt-0.5">{idea}</span>
           </li>
         ))}
       </ol>
@@ -452,22 +463,23 @@ function QuizSlide({ questions, onCopy }: { questions: string[]; onCopy: (t: str
           <h3 className="text-xl font-bold sm:text-2xl">අවබෝධතා ප්‍රශ්න</h3>
         </div>
         <button type="button" onClick={() => setShowTimer((s) => !s)}
-          className={`rounded-xl border-2 px-3 py-1.5 text-xs font-bold transition ${
-            showTimer ? "border-orange-500 bg-orange-500 text-white" : "border-amber-300 bg-white text-amber-700"}`}>
+          className={`rounded-xl border-2 px-3 py-1.5 text-xs font-bold shadow-sm transition active:scale-95 ${
+            showTimer ? "border-orange-500 bg-orange-500 text-white" : "border-amber-300 bg-white text-amber-700 hover:border-amber-400"}`}>
           ⏱ {showTimer ? "Timer වසන්න" : "Timer"}
         </button>
       </div>
 
       {showTimer && (
-        <div className="rounded-2xl bg-amber-50 py-3">
+        <div className="rounded-2xl border border-amber-100 bg-amber-50/80 py-3 shadow-inner">
           <QuizTimer />
         </div>
       )}
 
       <ol className="flex-1 space-y-3 overflow-y-auto">
         {questions.map((q, i) => (
-          <li key={i} className="rounded-2xl bg-amber-50 px-4 py-3 text-base font-medium text-stone-800 sm:text-lg">
-            <span className="mr-2 font-bold text-amber-700">{i + 1}.</span>{q}
+          <li key={i} className="flex gap-3 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3.5 text-base font-medium leading-relaxed text-stone-800 shadow-sm sm:text-lg">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-600 text-xs font-bold text-white shadow-sm">{i + 1}</span>
+            <span className="pt-0.5">{q}</span>
           </li>
         ))}
       </ol>

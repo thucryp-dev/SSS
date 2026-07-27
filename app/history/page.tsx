@@ -79,15 +79,17 @@ export default function HistoryPage() {
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button"
               onClick={() => { setShowFavsOnly((p) => !p); setShowHidden(false); }}
-              className={`flex items-center gap-1.5 rounded-xl border-2 px-3 py-2 text-sm font-bold transition ${
-                showFavsOnly ? "border-amber-500 bg-amber-500 text-white" : "border-amber-300 bg-white text-amber-700"}`}>
+              aria-pressed={showFavsOnly}
+              className={`flex items-center gap-1.5 rounded-xl border-2 px-3 py-2 text-sm font-bold shadow-sm transition active:scale-95 ${
+                showFavsOnly ? "border-amber-500 bg-amber-500 text-white shadow-amber-500/30" : "border-amber-300 bg-white text-amber-700 hover:border-amber-400"}`}>
               <Star className={`h-4 w-4 ${showFavsOnly ? "fill-white" : ""}`} /> ප්‍රිය
             </button>
             {hiddenCount > 0 && (
               <button type="button"
                 onClick={() => { setShowHidden((p) => !p); setShowFavsOnly(false); }}
-                className={`flex items-center gap-1.5 rounded-xl border-2 px-3 py-2 text-sm font-bold transition ${
-                  showHidden ? "border-stone-500 bg-stone-500 text-white" : "border-stone-300 bg-white text-stone-600"}`}>
+                aria-pressed={showHidden}
+                className={`flex items-center gap-1.5 rounded-xl border-2 px-3 py-2 text-sm font-bold shadow-sm transition active:scale-95 ${
+                  showHidden ? "border-stone-500 bg-stone-500 text-white" : "border-stone-300 bg-white text-stone-600 hover:border-stone-400"}`}>
                 {showHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                 {showHidden ? "නිවාරිත" : `${hiddenCount}`}
               </button>

@@ -617,7 +617,11 @@ export default function Home() {
           {lesson && !isLoading && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
               <Card className="overflow-hidden border-2 border-emerald-300 bg-emerald-50/80 shadow-xl">
-                {sections.image && (
+                {/* Uses lesson.sections (what THIS lesson was actually generated
+                    with), not the live `sections` toggle state — otherwise
+                    toggling the image checkbox off after generating would
+                    incorrectly hide an already-generated image. */}
+                {lesson.sections?.image && (
                   <div className="border-b border-emerald-200">
                     {lesson.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element

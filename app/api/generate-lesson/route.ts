@@ -189,21 +189,27 @@ function containsForeignScript(text: string): boolean {
 // ---------------------------------------------------------------------------
 
 function isValid(data: unknown, sections: LessonSections): data is RawGeminiLesson {
-  if (!data || typeof data !== "object") return false;
-  const d = data as Record<string, unknown>;
-  if (typeof d.title !== "string" || !d.title.trim()) return false;
-  if (typeof d.bible_verse !== "string" || !d.bible_verse.trim()) return false;
-  if (typeof d.memory_verse !== "string") return false;
-  if (sections.story && (!Array.isArray(d.story_slides) || d.story_slides.length === 0)) return false;
-  if (sections.quiz && (!Array.isArray(d.quiz_questions) || d.quiz_questions.length === 0)) return false;
-  if (sections.activities && (!Array.isArray(d.activity_ideas) || d.activity_ideas.length === 0)) return false;
-  if (sections.image && (typeof d.image_prompt !== "string" || !d.image_prompt.trim())) return false;
+  return getValidationFailureReason(data, sections) === null;
+}
 
-  // Script-purity check: gather every Sinhala-facing string (everything
-  // except image_prompt, which is deliberately English) and reject the
-  // whole response if any contains Devanagari or Tamil characters. This
-  // is what actually catches foreign-script leakage — the prompt reduces
-  // it, but only this check guarantees it never reaches a teacher's screen.
+/**
+ * Same checks as isValid(), but returns WHY it failed instead of just a
+ * boolean — used only for the console.warn below, so that if this ever
+ * exhausts all 4 models (e.g. a persistent script-purity issue), Vercel's
+ * logs immediately show whether it's a shape problem or foreign-script
+ * leakage, instead of requiring someone to guess from a raw JSON dump.
+ */
+function getValidationFailureReason(data: unknown, sections: LessonSections): string | null {
+  if (!data || typeof data !== "object") return "not an object";
+  const d = data as Record<string, unknown>;
+  if (typeof d.title !== "string" || !d.title.trim()) return "missing/empty title";
+  if (typeof d.bible_verse !== "string" || !d.bible_verse.trim()) return "missing/empty bible_verse";
+  if (typeof d.memory_verse !== "string") return "missing memory_verse";
+  if (sections.story && (!Array.isArray(d.story_slides) || d.story_slides.length === 0)) return "missing/empty story_slides";
+  if (sections.quiz && (!Array.isArray(d.quiz_questions) || d.quiz_questions.length === 0)) return "missing/empty quiz_questions";
+  if (sections.activities && (!Array.isArray(d.activity_ideas) || d.activity_ideas.length === 0)) return "missing/empty activity_ideas";
+  if (sections.image && (typeof d.image_prompt !== "string" || !d.image_prompt.trim())) return "missing/empty image_prompt";
+
   const sinhalaFacingStrings: string[] = [d.title, d.bible_verse, d.memory_verse].filter(
     (v): v is string => typeof v === "string"
   );
@@ -216,9 +222,9 @@ function isValid(data: unknown, sections: LessonSections): data is RawGeminiLess
   if (Array.isArray(d.activity_ideas)) {
     sinhalaFacingStrings.push(...d.activity_ideas.filter((s): s is string => typeof s === "string"));
   }
-  if (sinhalaFacingStrings.some(containsForeignScript)) return false;
+  if (sinhalaFacingStrings.some(containsForeignScript)) return "foreign script (Devanagari/Tamil) detected";
 
-  return true;
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +290,7 @@ async function generateLesson(
       const clean = raw.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
       const parsed = JSON.parse(clean);
       if (!isValid(parsed, sections)) {
-        console.warn(`[Gemini] ${model} invalid shape, trying next`);
+        console.warn(`[Gemini] ${model} rejected — ${getValidationFailureReason(parsed, sections)}, trying next`);
         continue;
       }
       console.log(`[Gemini] ✓ ${model} (key type: ${apiKey.startsWith("AQ.") ? "Auth" : "Standard"})`);

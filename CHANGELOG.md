@@ -18,6 +18,23 @@ tooling — but they follow the same conceptual meaning as SemVer:
 _Add new entries here as you make changes — then move them under a new
 version heading below once you're ready to consider them "shipped."_
 
+## [2.4.1] - 2026-07-27
+### Fixed
+- **Gap audit**: `firestore.rules`' `isValidSections()` existed but was
+  never actually called by `isValidPendingLesson()` or `isValidLesson()`
+  — dead code. Neither function validated the `sections` field at all, and
+  `isValidLesson()` didn't require or type-check `age_group`,
+  `memory_verse`, `activity_ideas`, or `image_url` — fields
+  `lib/firebase.ts` has written on every save since v2.0. Firestore's
+  `hasAll()` doesn't reject undeclared extra fields, so this never broke
+  writes in practice — but it meant a malformed value in any of those
+  fields could have been written without the security rules catching it.
+  All five fields are now genuinely validated, and `isValidSections()` is
+  wired up and checks `activities` alongside the original three keys.
+
+No user-facing behavior changes in this release — data-integrity/security
+hardening only, found via a dedicated gap-recheck pass.
+
 ## [2.4.0] - 2026-07-27
 ### Fixed
 - **🔴 Hugging Face image generation fixed.** The old endpoint

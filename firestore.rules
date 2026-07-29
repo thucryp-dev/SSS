@@ -1,7 +1,7 @@
 rules_version = '2';
 
 /**
- * firestore.rules — v1.12
+ * firestore.rules — v2.4
  *
  * Anonymous Auth scoped (one uid per device, no login screen).
  * Every document carries ownerId = request.auth.uid.
@@ -10,6 +10,16 @@ rules_version = '2';
  *   lessons: allow get = open (shareable links work for anyone with the URL)
  *            allow list = owner-only (history page only shows your lessons)
  *   pendingLessons: fully owner-scoped (no sharing use case)
+ *
+ * 🔴 v2.4 fix: isValidSections() previously existed but was never called
+ * from isValidPendingLesson() or isValidLesson() — dead code. Neither
+ * function validated `sections`, and isValidLesson() didn't even require
+ * `age_group`, `memory_verse`, or `activity_ideas` — all fields that
+ * lib/firebase.ts has written on every save since v2.0/v2.4. Firestore's
+ * hasAll() doesn't reject undeclared extra fields, so writes were never
+ * actually broken by this gap — but validation was much looser than the
+ * real data shape, so a malformed sections/age_group value could have
+ * been written without being caught. Now genuinely validated.
  */
 
 service cloud.firestore {
@@ -21,36 +31,46 @@ service cloud.firestore {
 
     function isValidSections(s) {
       return s is map
-        && s.keys().hasAll(['story', 'quiz', 'image'])
+        && s.keys().hasAll(['story', 'quiz', 'image', 'activities'])
         && s.story is bool
         && s.quiz  is bool
-        && s.image is bool;
+        && s.image is bool
+        && s.activities is bool;
     }
 
     function isValidPendingLesson(data) {
-      return data.keys().hasAll(['inputText', 'createdAt', 'status', 'ownerId', 'ageGroup'])
+      return data.keys().hasAll(['inputText', 'createdAt', 'status', 'ownerId', 'ageGroup', 'sections'])
         && data.inputText is string
         && data.inputText.size() > 0
         && data.inputText.size() <= 2000
         && data.createdAt is int
         && data.status == 'pending'
         && data.ownerId is string
-        && isValidAgeGroup(data.ageGroup);
+        && isValidAgeGroup(data.ageGroup)
+        && isValidSections(data.sections);
     }
 
     function isValidLesson(data) {
       return data.keys().hasAll([
-          'title', 'bible_verse', 'story_slides',
-          'quiz_questions', 'inputText', 'createdAt', 'ownerId'
+          'title', 'bible_verse', 'memory_verse', 'story_slides',
+          'quiz_questions', 'activity_ideas', 'image_url', 'age_group',
+          'sections', 'inputText', 'createdAt', 'ownerId'
         ])
         && data.title is string
         && data.title.size() > 0
         && data.title.size() <= 200
         && data.bible_verse is string
+        && data.memory_verse is string
+        && data.memory_verse.size() <= 300
         && data.story_slides is list
         && data.story_slides.size() <= 12
         && data.quiz_questions is list
         && data.quiz_questions.size() <= 12
+        && data.activity_ideas is list
+        && data.activity_ideas.size() <= 12
+        && (data.image_url == null || data.image_url is string)
+        && isValidAgeGroup(data.age_group)
+        && isValidSections(data.sections)
         && data.inputText is string
         && data.inputText.size() <= 2000
         && data.createdAt is int
@@ -70,9 +90,9 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.ownerId == request.auth.uid
         && isValidLesson(request.resource.data);
-      // Open single-doc read — powers shareable /lesson/[id] links
+      // Shareable links: anyone with the URL can fetch this one document.
       allow get: if true;
-      // Owner-only list — powers the history page
+      // History list: only your own lessons.
       allow list: if request.auth != null
         && request.auth.uid == resource.data.ownerId;
       allow update, delete: if false;

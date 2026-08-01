@@ -18,6 +18,61 @@ tooling — but they follow the same conceptual meaning as SemVer:
 _Add new entries here as you make changes — then move them under a new
 version heading below once you're ready to consider them "shipped."_
 
+## [2.5.0] - 2026-07-29
+### Added
+- **Image generation model fallback chain**: `generateImage()` now tries
+  `stabilityai/stable-diffusion-xl-base-1.0` then
+  `black-forest-labs/FLUX.1-schnell` in sequence, mirroring the pattern
+  that fixed Gemini's model availability issue. It's genuinely uncertain
+  which text-to-image models are actively served on Hugging Face's free
+  `hf-inference` route in 2026 (some documentation suggests it's now
+  CPU-focused, which heavy models like SDXL may not run on in reasonable
+  time) — trying a second, better-documented model costs nothing extra
+  when the first succeeds and meaningfully raises the odds when it doesn't.
+  Honest limitation: unverified against the live API (no internet access
+  in the build environment) — `/api/test-huggingface` remains the way to
+  get a definitive answer after deploying.
+- `/api/test-huggingface` rewritten to test both models in the same
+  fallback chain and report per-model results (mirroring
+  `/api/test-gemini`'s approach), so the diagnostic accurately predicts
+  what a real lesson generation will experience.
+
+### Fixed
+- **Timeout budget — now genuinely coordinated on both sides.** Adding a
+  second image model at the old 45s-per-model timeout would have totaled
+  up to 90s worst case — exceeding this route's `maxDuration = 60` and
+  getting killed by Vercel mid-request before the fallback even completed.
+  Reduced to 22s per model (44s worst case for images). A follow-up
+  gap-recheck found the OTHER half of this same problem: Gemini's own
+  per-model timeout was still 30s × up to 4 models = 120s worst case,
+  completely uncoordinated with the image budget despite the original
+  comment claiming to leave "headroom" for it — a genuine silent hang
+  on Gemini alone could have consumed the entire 60s budget by itself,
+  before image generation ever got a chance to run, or worse, blown past
+  it and lost an already-successfully-generated lesson to Vercel's
+  platform-level 504 timeout. Reduced to 15s per Gemini model (60s
+  absolute worst case alone) with both sides' comments now cross-
+  referencing the same coordinated numbers. Genuine residual risk: if
+  every single model on both services simultaneously silently hangs
+  (rather than the far more common fast 4xx failure), the combined worst
+  case can still theoretically exceed 60s — accepted as a deliberate
+  tradeoff, since real failures observed throughout this project have
+  consistently been fast error responses, not silent hangs, and further
+  tightening would start risking premature abort of legitimate, slower
+  (but successful) Gemini calls.
+- A stray leftover closing brace introduced while editing
+  `generateImage()` (caught immediately by the routine brace-balance
+  check before it shipped) and a stray orphaned markdown code fence in
+  `KEYS_GUIDE.md`'s updated example response (same story — caught on
+  re-view, not shipped).
+- `KEYS_GUIDE.md`'s example `/api/test-huggingface` response updated to
+  match the new multi-model output shape.
+
+No new in-app changelog entry — this is a reliability/robustness
+improvement to an existing feature (image generation), not a new
+user-facing capability, consistent with this project's existing
+convention for internal-only changes.
+
 ## [2.4.1] - 2026-07-27
 ### Fixed
 - **Gap audit**: `firestore.rules`' `isValidSections()` existed but was

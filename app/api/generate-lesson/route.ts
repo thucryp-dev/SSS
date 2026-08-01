@@ -1,17 +1,35 @@
 /**
- * app/api/generate-lesson/route.ts  v2.2
+ * app/api/generate-lesson/route.ts  v2.5
  *
- * 🔴 CRITICAL FIX (v2.2): Every Gemini API key format — both legacy
- * "AIza..." keys and the newer "AQ.Ab..." keys — authenticates with the
- * SAME header: `x-goog-api-key: <key>`. There is no format-based branching
- * needed. Earlier versions of this file incorrectly sent AQ. keys via
- * `Authorization: Bearer <key>`, which Google's endpoint rejects with a
- * 401 "Expected OAuth 2.0 access token" error — that header is for real
- * OAuth tokens, not API keys, regardless of the key's prefix. Confirmed
- * against Google's official docs (ai.google.dev/gemini-api/docs/api-key)
- * and a live example showing an AQ.Ab... key working via x-goog-api-key.
+ * Key fixes to date (newest first):
  *
- * New output fields:
+ * 🔴 v2.5 — Timeout budget coordinated across BOTH Gemini and image calls,
+ * not just one side. Gemini per-model timeout 30s→15s; combined with
+ * image's 22s×2 models, worst case now sits at (not comfortably under)
+ * the route's 60s maxDuration — a deliberate tradeoff since real observed
+ * failures are fast 4xx responses, not silent hangs. Image generation
+ * gained a 2-model fallback chain (SDXL → FLUX.1-schnell), since it was
+ * unclear which text-to-image models the free `hf-inference` route
+ * actually serves. Endpoint itself migrated from the retired
+ * api-inference.huggingface.co to router.huggingface.co/hf-inference.
+ *
+ * 🔴 v2.4 — Foreign-script leakage (Hindi/Tamil characters appearing in
+ * Sinhala output) fixed with a hard server-side Unicode-range validation
+ * check, not just prompt instructions (prompts alone can't guarantee
+ * zero leakage). System prompt also strengthened for natural/idiomatic
+ * Sinhala and scriptural accuracy (without violating the non-verbatim
+ * copyright constraint on the ROV translation).
+ *
+ * 🔴 v2.2 — Every Gemini API key format — both legacy "AIza..." keys and
+ * the newer "AQ.Ab..." keys — authenticates with the SAME header:
+ * `x-goog-api-key: <key>`. No format-based branching needed. Earlier
+ * versions incorrectly sent AQ. keys via `Authorization: Bearer <key>`,
+ * which Google's endpoint rejects with 401 "Expected OAuth 2.0 access
+ * token" — that header is for real OAuth tokens, not API keys, regardless
+ * of the key's prefix. Confirmed against Google's official docs
+ * (ai.google.dev/gemini-api/docs/api-key).
+ *
+ * Output fields (since v2.0):
  *   memory_verse   — short memorable phrasing of the verse (child/adult appropriate)
  *   activity_ideas — 2-3 simple class activities (age-appropriate, no materials needed)
  */
@@ -260,7 +278,18 @@ async function generateLesson(
         method: "POST",
         headers,
         body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(30000),
+        // 15s per model, not 30s. This route's total budget is 60s
+        // (maxDuration, top of file), shared with image generation
+        // (22s × 2 models = 44s worst case — see generateImage() below).
+        // Most real failures we've actually seen (auth, quota, deprecated
+        // model) return fast 4xx responses and exit the loop immediately
+        // via the break below — this timeout only matters for a genuine
+        // silent hang, where waiting the old 30s × up to 4 models could
+        // consume the ENTIRE 60s budget on Gemini alone, leaving zero time
+        // for the image step and risking the whole response (including a
+        // lesson Gemini may have already generated) being killed by
+        // Vercel's platform-level timeout before it's ever returned.
+        signal: AbortSignal.timeout(15000),
       });
     } catch (err) {
       console.warn(`[Gemini] ${model} fetch error:`, err);
@@ -310,14 +339,27 @@ async function generateLesson(
 // 🔴 v2.4 fix: api-inference.huggingface.co (the old endpoint) has been
 // superseded by Hugging Face's "Inference Providers" architecture, routed
 // through router.huggingface.co. Same Bearer-token auth, different domain.
-// Also: image failures previously only logged a status code — now the
-// full response body is logged, since that's where HF puts the actual
-// reason (e.g. "provider not enabled", "billing required", quota, etc).
-// See /api/test-huggingface for a standalone diagnostic of this exact path.
+//
+// 🔴 v2.5: added a model fallback chain, mirroring the pattern that fixed
+// Gemini. It's genuinely uncertain which text-to-image models are actually
+// served on the free "hf-inference" route in 2026 — some documentation
+// suggests it's now CPU-focused, which heavy models like SDXL may not run
+// on in reasonable time, while FLUX.1-schnell is the flagship documented
+// example for Inference Providers generally. Trying both (SDXL first, to
+// match the existing Pixar-3D-style prompts most closely; FLUX.1-schnell
+// second, as the better-documented fallback) costs nothing extra when the
+// first one works, and meaningfully raises the odds when it doesn't.
+// Honest limitation: this hasn't been live-tested (no internet access in
+// the build environment) — /api/test-huggingface remains the way to get a
+// definitive, real answer after deploying.
 // ---------------------------------------------------------------------------
 
-const HF_ROUTER_URL =
-  "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0";
+const HF_MODELS = [
+  "stabilityai/stable-diffusion-xl-base-1.0",
+  "black-forest-labs/FLUX.1-schnell",
+];
+
+const HF_ROUTER_BASE = "https://router.huggingface.co/hf-inference/models";
 
 async function generateImage(prompt: string): Promise<string | null> {
   const apiKey = process.env.HUGGINGFACE_API_KEY;
@@ -325,36 +367,58 @@ async function generateImage(prompt: string): Promise<string | null> {
     console.warn("[HuggingFace] HUGGINGFACE_API_KEY not set — skipping image generation.");
     return null;
   }
-  try {
-    const res = await fetch(HF_ROUTER_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ inputs: prompt, options: { wait_for_model: true } }),
-      signal: AbortSignal.timeout(45000),
-    });
 
-    if (!res.ok) {
-      // Read as text first — HF's error responses are JSON, but reading as
-      // text is safe even if something unexpected comes back, and this is
-      // exactly what shows up in Vercel's function logs for diagnosis.
-      const errorBody = await res.text();
-      console.error(`[HuggingFace] image generation failed — status ${res.status}:`, errorBody.slice(0, 500));
-      return null;
-    }
+  for (const model of HF_MODELS) {
+    try {
+      const res = await fetch(`${HF_ROUTER_BASE}/${model}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ inputs: prompt, options: { wait_for_model: true } }),
+        // 22s per model, not 45s — now that there are 2 models in the
+        // fallback chain, the OLD 45s-per-model timeout could total 90s
+        // worst case, exceeding this route's maxDuration = 60 (defined at
+        // the top of this file) and getting killed by Vercel mid-request.
+        // Coordinated budget: Gemini worst case 15s × 4 models = 60s,
+        // image worst case 22s × 2 models = 44s. These can't BOTH hit
+        // their absolute worst case and still fit in 60s total — but real
+        // failures are fast 4xx responses that exit early (see the break
+        // conditions above and below), not silent hangs, so this is a
+        // deliberate, documented tradeoff: protect the common case tightly
+        // rather than a near-impossible simultaneous-worst-case scenario.
+        signal: AbortSignal.timeout(22000),
+      });
 
-    const buf = await res.arrayBuffer();
-    const mime = res.headers.get("content-type") ?? "image/jpeg";
-    if (buf.byteLength < 100) {
-      // A real image is never this small — this is almost always an error
-      // JSON body that slipped through with a 200-ish status, or an empty response.
-      console.error("[HuggingFace] response too small to be a real image:", buf.byteLength, "bytes");
-      return null;
+      if (!res.ok) {
+        // Read as text first — HF's error responses are JSON, but reading as
+        // text is safe even if something unexpected comes back, and this is
+        // exactly what shows up in Vercel's function logs for diagnosis.
+        const errorBody = await res.text();
+        console.warn(`[HuggingFace] ${model} failed — status ${res.status}:`, errorBody.slice(0, 300));
+        // 401/403 = key/account problem, not model-specific — no point
+        // trying the next model, it'll fail the same way.
+        if (res.status === 401 || res.status === 403) return null;
+        continue;
+      }
+
+      const buf = await res.arrayBuffer();
+      const mime = res.headers.get("content-type") ?? "image/jpeg";
+      if (buf.byteLength < 100) {
+        // A real image is never this small — this is almost always an error
+        // JSON body that slipped through with a 200-ish status.
+        console.warn(`[HuggingFace] ${model} returned a too-small response (${buf.byteLength} bytes), trying next`);
+        continue;
+      }
+
+      console.log(`[HuggingFace] ✓ image generated via ${model}`);
+      return `data:${mime};base64,${Buffer.from(buf).toString("base64")}`;
+    } catch (err) {
+      console.warn(`[HuggingFace] ${model} request error:`, err instanceof Error ? err.message : err);
+      continue;
     }
-    return `data:${mime};base64,${Buffer.from(buf).toString("base64")}`;
-  } catch (err) {
-    console.error("[HuggingFace] request error:", err instanceof Error ? err.message : err);
-    return null;
   }
+
+  console.error("[HuggingFace] all models failed — no image generated for this lesson.");
+  return null;
 }
 
 // ---------------------------------------------------------------------------

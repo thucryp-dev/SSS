@@ -99,15 +99,24 @@ split that way.
   header (Google's current documented standard — confirmed at
   ai.google.dev/gemini-api/docs/api-key). There is no format-specific
   branching needed in the code. If lesson generation returns 502, visit
-  `/api/test-gemini` in the browser — it tests all 6 models in the
+  `/api/test-gemini` in the browser — it tests all 4 models in the
   fallback chain and shows the exact error for each one.
-- **Gemini model fallback chain**: `gemini-2.5-flash` → `gemini-2.5-flash-lite-preview-06-17`
-  → `gemini-2.0-flash` → `gemini-2.0-flash-lite` → `gemini-1.5-flash` →
-  `gemini-1.5-flash-8b`. The first model your key can access is used
-  automatically — no manual swapping needed. A 400/401/403/429 response
-  stops the fallback loop immediately (it means the key itself is bad, not
-  that model specifically), so a real auth failure surfaces in seconds
-  instead of after all 6 models are tried.
+- **Gemini model fallback chain**: `gemini-3.6-flash` → `gemini-3.5-flash`
+  → `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite` (current Gemini 3.x
+  generation, all confirmed GA — Google retired the 1.5.x/2.0.x/2.5.x
+  generation for new API keys mid-2026). The first model your key can
+  access is used automatically — no manual swapping needed. A
+  400/401/403/429 response stops the fallback loop immediately (it means
+  the key itself is bad, not that model specifically), so a real auth
+  failure surfaces in seconds instead of after all 4 models are tried.
+- **Hugging Face endpoint (2026)**: Hugging Face migrated from
+  `api-inference.huggingface.co` to `router.huggingface.co/hf-inference/...`
+  ("Inference Providers" architecture) — same Bearer-token auth, new
+  domain, already updated in the route. Image generation may also require
+  enabling "Inference Providers" / billing in your Hugging Face account
+  settings, even on the free tier. If images aren't appearing, visit
+  `/api/test-huggingface` — it tests the exact same call the app makes and
+  returns Hugging Face's real error message with a specific hint.
 - **Hugging Face cold starts**: the first SDXL request after idle time can
   take 20–30s while the model loads. The route already sets
   `wait_for_model: true` and a 45s timeout; consider a periodic warm-up
